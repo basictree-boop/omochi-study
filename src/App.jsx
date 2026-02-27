@@ -251,25 +251,84 @@ function Divider({ label }) {
 
 function BarChart({ records }) {
   if (records.length === 0) return <div style={{ color: "#bbb", textAlign: "center", padding: 24 }}>まだ記録がありません</div>;
-  const last7 = records.slice(-7);
-  const maxTime = Math.max(...last7.map((r) => r.studyMinutes || 0), 60);
+
+  // 日付ごとに朝昼夜を集計
+  const dayMap = {};
+  records.forEach((r) => {
+    if (!dayMap[r.date]) dayMap[r.date] = { 朝: 0, 昼: 0, 夜: 0 };
+    dayMap[r.date][r.timeSlot] = (dayMap[r.date][r.timeSlot] || 0) + (r.studyMinutes || 0);
+  });
+  // 直近7日分
+  const days = Object.keys(dayMap).sort().slice(-7);
+
+  const CHART_HEIGHT = 160; // px
+  const MAX_MINUTES = 240;  // 4時間を最大スケール
+  const SCALE_LABELS_Y = [0, 60, 120, 180, 240]; // 0,1,2,3,4h
+
+  const slotColors = {
+    朝: "#FFA500",
+    昼: "#4ECDC4",
+    夜: "#764ba2",
+  };
+
   return (
     <div>
       <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontWeight: 600 }}>📊 勉強時間（直近7日）</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", height: 120 }}>
-        {last7.map((r, i) => {
-          const height = ((r.studyMinutes || 0) / maxTime) * 100;
-          const d = new Date(r.date);
-          return (
-            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-              <div style={{ fontSize: 10, color: "#aaa" }}>{r.studyMinutes}分</div>
-              <div style={{ width: "100%", height: `${height}%`, minHeight: r.studyMinutes > 0 ? 4 : 2, background: r.timeSlot === "朝" ? "linear-gradient(180deg, #FFD700, #FFA500)" : r.timeSlot === "昼" ? "linear-gradient(180deg, #96CEB4, #4ECDC4)" : "linear-gradient(180deg, #667eea, #764ba2)", borderRadius: "6px 6px 0 0", transition: "height 0.5s ease" }} />
-              <div style={{ fontSize: 10, color: "#aaa" }}>{d.getMonth()+1}/{d.getDate()}</div>
+      <div style={{ display: "flex", gap: 4 }}>
+        {/* 縦軸ラベル */}
+        <div style={{ display: "flex", flexDirection: "column-reverse", justifyContent: "space-between", height: CHART_HEIGHT, paddingBottom: 20, marginRight: 4 }}>
+          {SCALE_LABELS_Y.map((m) => (
+            <div key={m} style={{ fontSize: 9, color: "#ccc", lineHeight: 1 }}>
+              {m === 0 ? "0" : `${m/60}h`}
             </div>
-          );
-        })}
+          ))}
+        </div>
+        {/* グラフ本体 */}
+        <div style={{ flex: 1, position: "relative" }}>
+          {/* 横グリッド線 */}
+          {SCALE_LABELS_Y.map((m) => (
+            <div key={m} style={{
+              position: "absolute", left: 0, right: 0,
+              bottom: 20 + (m / MAX_MINUTES) * (CHART_HEIGHT - 20),
+              height: 1, background: m === 0 ? "#ddd" : "#f0ece6",
+            }} />
+          ))}
+          {/* 棒グラフ */}
+          <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: CHART_HEIGHT, paddingBottom: 20 }}>
+            {days.map((date) => {
+              const d = new Date(date);
+              const slots = dayMap[date];
+              const total = (slots.朝 || 0) + (slots.昼 || 0) + (slots.夜 || 0);
+              const totalLabel = total >= 60 ? `${Math.floor(total/60)}h${total%60>0?total%60+'分':''}` : `${total}分`;
+              return (
+                <div key={date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, height: "100%", justifyContent: "flex-end" }}>
+                  {total > 0 && <div style={{ fontSize: 9, color: "#aaa", marginBottom: 2 }}>{totalLabel}</div>}
+                  {/* 積み上げ棒 */}
+                  <div style={{ width: "100%", display: "flex", flexDirection: "column-reverse", borderRadius: "6px 6px 0 0", overflow: "hidden" }}>
+                    {["朝", "昼", "夜"].map((slot) => {
+                      const mins = slots[slot] || 0;
+                      if (mins === 0) return null;
+                      const h = (mins / MAX_MINUTES) * (CHART_HEIGHT - 20);
+                      return (
+                        <div key={slot} style={{
+                          width: "100%", height: h,
+                          background: slotColors[slot],
+                          minHeight: 3,
+                        }} />
+                      );
+                    })}
+                    {total === 0 && <div style={{ width: "100%", height: 3, background: "#f0ece6", borderRadius: 3 }} />}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#aaa", marginTop: 4 }}>{d.getMonth()+1}/{d.getDate()}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 11, color: "#aaa" }}><span>🟡 朝</span><span>🟢 昼</span><span>🟣 夜</span></div>
+      <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 11, color: "#aaa" }}>
+        <span>🟡 朝</span><span>🟢 昼</span><span>🟣 夜</span>
+      </div>
     </div>
   );
 }
@@ -753,8 +812,6 @@ export default function App() {
             <Divider label="✏️ 今日の記録" />
             <TextArea label="⭐ 今日の良かったこと・ほめたいこと" value={today.parent.goodPoint} onChange={(v) => setToday({ ...today, parent: { ...today.parent, goodPoint: v } })} placeholder="子どもの良かったところ" color="#4ECDC4" />
             <TextArea label="💭 つまづき・課題" value={today.parent.tsumazuki} onChange={(v) => setToday({ ...today, parent: { ...today.parent, tsumazuki: v } })} placeholder="サポートが必要なこと" color="#96CEB4" />
-            <Divider label="✅ 今日の生活チェック" />
-            <DailyCheckList checks={today.dailyChecks} onChange={(v) => setToday({ ...today, dailyChecks: v })} bestDay={today.bestDay} onBestDayChange={(v) => setToday({ ...today, bestDay: v })} color="#4ECDC4" />
             <div style={{ background: "#F0FAFA", borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 12, color: "#4ECDC4", lineHeight: 1.7 }}>
               💡 <strong>声かけヒント：</strong><br />結果より過程を褒めましょう。努力を認める言葉が子どものやる気につながります。
             </div>
