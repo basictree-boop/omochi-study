@@ -36,6 +36,18 @@ const OMOCHI_MESSAGES = [
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxIh-ZpX2N-QzCWtoWIphSVSuRfsRbXwPlYPQdqRwVGqncx70JhsyV_CA3zCJeM-qTF0A/exec";
 
+// 日本時間（JST）でYYYY-MM-DDを返す
+function getJSTDateString(date = new Date()) {
+  const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().split("T")[0];
+}
+
+// 日本時間でYYYY-MM-DD HH:MM:SSを返す
+function getJSTDateTimeString(date = new Date()) {
+  const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().replace("T", " ").substring(0, 19);
+}
+
 function getOmochiMessage(streak, totalDays) {
   if (streak >= 7) return `すごい！${streak}日連続だ！ぼくの回し車より速いかも！🏆🐹`;
   if (streak >= 3) return `${streak}日連続！ぼくも負けずに回し車がんばるよ！🔥`;
@@ -296,7 +308,7 @@ function BarChart({ records }) {
           {/* 棒グラフ */}
           <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: CHART_HEIGHT, paddingBottom: 20 }}>
             {days.map((date) => {
-              const d = new Date(date);
+              const [dy, dm, dd] = date.split("-").map(Number);
               const slots = dayMap[date];
               const total = (slots.朝 || 0) + (slots.昼 || 0) + (slots.夜 || 0);
               const totalLabel = total >= 60 ? `${Math.floor(total/60)}h${total%60>0?total%60+'分':''}` : `${total}分`;
@@ -319,7 +331,7 @@ function BarChart({ records }) {
                     })}
                     {total === 0 && <div style={{ width: "100%", height: 3, background: "#f0ece6", borderRadius: 3 }} />}
                   </div>
-                  <div style={{ fontSize: 10, color: "#aaa", marginTop: 4 }}>{d.getMonth()+1}/{d.getDate()}</div>
+                  <div style={{ fontSize: 10, color: "#aaa", marginTop: 4 }}>{dm}/{dd}</div>
                 </div>
               );
             })}
@@ -341,13 +353,13 @@ function MentalChart({ records }) {
       <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontWeight: 600 }}>💝 メンタル推移</div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {last7.map((r, i) => {
-          const d = new Date(r.date);
+          const [, mm, md] = (r.date || "").split("-").map(Number);
           const cm = r.child?.気持ち || 0;
           const pm = r.parent?.気持ち || 0;
           return (
             <div key={i} style={{ flex: 1, textAlign: "center" }}>
               <div style={{ fontSize: 18 }}>{cm > 0 ? SCALE_LABELS["気持ち"][cm-1] : "·"}</div>
-              <div style={{ fontSize: 10, color: "#ccc" }}>{d.getMonth()+1}/{d.getDate()}</div>
+              <div style={{ fontSize: 10, color: "#ccc" }}>{mm}/{md}</div>
               {pm > 0 && <div style={{ fontSize: 12, opacity: 0.6 }}>{SCALE_LABELS["気持ち_parent"][pm-1]}</div>}
             </div>
           );
@@ -420,8 +432,9 @@ function CheckChart({ records }) {
 function RecordCard({ record, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const d = new Date(record.date);
-  const dateStr = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+  // タイムゾーン問題を避けるため date文字列を直接パース
+  const [year, month, day] = (record.date || "").split("-").map(Number);
+  const dateStr = `${year}年${month}月${day}日`;
   const childMood = record.child?.気持ち || 3;
   const moodIcon = SCALE_LABELS["気持ち"][Math.max(0, childMood-1)];
   const checks = record.dailyChecks || {};
@@ -435,6 +448,9 @@ function RecordCard({ record, onDelete }) {
           <div style={{ fontSize: 12, color: "#aaa" }}>
             {record.timeSlot === "朝" ? "🌅 朝" : record.timeSlot === "昼" ? "☀️ 昼" : "🌙 夜"} · {record.studyMinutes}分 · {(record.subjects || []).join(", ")}{checkedCount > 0 && ` · ✅${checkedCount}`}
           </div>
+          {record.recordedAt && (
+            <div style={{ fontSize: 10, color: "#ccc", marginTop: 2 }}>🕐 記録：{record.recordedAt}</div>
+          )}
         </div>
         <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }} style={{ border: "none", background: "none", fontSize: 16, cursor: "pointer", color: "#ddd", padding: 4 }}>🗑️</button>
         <div style={{ fontSize: 16, color: "#ccc", cursor: "pointer" }}>{expanded ? "▲" : "▼"}</div>
@@ -547,7 +563,7 @@ export default function App() {
   const [tab, setTab] = useState("home");
   const [records, setRecords] = useState([]);
   const [today, setToday] = useState({
-    date: new Date().toISOString().split("T")[0],
+    date: getJSTDateString(),
     timeSlot: "朝",
     studyMinutes: 0,
     subjectMinutes: { 算数: 0, 国語: 0, 理科: 0, 社会: 0 },
@@ -628,7 +644,7 @@ export default function App() {
     const sm = today.subjectMinutes || {};
     const totalMins = Object.values(sm).reduce((a, b) => a + b, 0);
     const subs = Object.entries(sm).filter(([, v]) => v > 0).map(([k]) => k);
-    const recordToSave = { ...today, studyMinutes: totalMins, subjects: subs };
+    const recordToSave = { ...today, studyMinutes: totalMins, subjects: subs, recordedAt: getJSTDateTimeString() };
     await syncToSheet(recordToSave);
     // ローカルにも保存（フォールバック用）
     const newRecords = [...records];
@@ -668,13 +684,13 @@ export default function App() {
   const totalHours = Math.floor(totalMinutes / 60);
   const streak = (() => {
     let s = 0;
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = getJSTDateString();
     const dates = [...new Set(records.map((r) => r.date))].sort().reverse();
     for (let i = 0; i < dates.length; i++) {
       const d = new Date(dates[i]);
       const expected = new Date(todayStr);
       expected.setDate(expected.getDate() - i);
-      if (d.toISOString().split("T")[0] === expected.toISOString().split("T")[0]) s++;
+      if (getJSTDateString(d) === getJSTDateString(expected)) s++;
       else break;
     }
     return s;
