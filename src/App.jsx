@@ -561,10 +561,10 @@ export default function App() {
   const S = {
     app: { maxWidth: 440, margin: "0 auto", minHeight: "100vh", background: "#FFFBF7", fontFamily: "'Hiragino Maru Gothic ProN', 'Noto Sans JP', sans-serif" },
     // ヘッダーをコンパクトに
-    header: { background: "linear-gradient(135deg, #FF8C42 0%, #FFB347 100%)", padding: "14px 16px 52px", position: "relative", overflow: "hidden" },
+    header: { background: "linear-gradient(135deg, #FF8C42 0%, #FFB347 100%)", padding: "12px 16px 16px", position: "relative", overflow: "hidden" },
     nav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 440, background: "white", borderTop: "1px solid #f0ece6", display: "flex", zIndex: 100, boxShadow: "0 -4px 20px rgba(0,0,0,0.08)" },
     navBtn: (a) => ({ flex: 1, padding: "8px 4px 12px", border: "none", background: "none", color: a ? "#FF8C42" : "#bbb", fontSize: 10, fontWeight: a ? 700 : 400, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }),
-    content: { padding: "0 16px 100px", marginTop: -36 },
+    content: { padding: "12px 16px 100px", marginTop: 0 },
     card: { background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" },
     title: (c) => ({ fontSize: 16, fontWeight: 800, color: c || "#444", marginBottom: 16 }),
     saveBtn: (bg) => ({ width: "100%", padding: "16px", background: bg || "linear-gradient(135deg, #FF8C42, #FF6B6B)", border: "none", borderRadius: 16, color: "white", fontSize: 18, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(255,107,107,0.3)", letterSpacing: 1, marginTop: 4 }),
