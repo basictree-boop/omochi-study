@@ -488,8 +488,8 @@ function ParentAdvice({ records, today }) {
   else if (topSubject) advices.push(`🔢 最近は${topSubject}に一番時間をかけています。得意を伸ばしつつ、他の科目も少しずつ。`);
 
   // 体調チェック
-  const条件 = recent.filter(r => r.dailyChecks?.sleep);
-  if (条件.length < recent.length * 0.5) advices.push("😴 睡眠チェックの達成率が低めです。受験期の体調管理はとても大切！早寝早起きを心がけましょう。");
+  const sleepCheck = recent.filter(r => r.dailyChecks?.sleep);
+  if (sleepCheck.length < recent.length * 0.5) advices.push("😴 睡眠チェックの達成率が低めです。受験期の体調管理はとても大切！早寝早起きを心がけましょう。");
 
   return (
     <div style={{ background: "#F0FAFA", borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 12, lineHeight: 1.8 }}>
@@ -542,7 +542,7 @@ function TestTab({ tests, onSave, onDelete }) {
         <div style={{ fontWeight: 700, color, marginBottom: 10, fontSize: 14 }}>{icon} {label}</div>
         {/* 偏差値・得点・平均 */}
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          {[["deviation","偏差値",""],["score","得点",""],["avg","平均点",""]].map(([field, lbl]) => (
+          {[["score","得点",""],["avg","平均点",""],["deviation","偏差値",""]].map(([field, lbl]) => (
             <div key={field} style={{ flex: 1 }}>
               <div style={{ fontSize: 10, color: "#aaa", marginBottom: 3, textAlign: "center" }}>{lbl}</div>
               <input type="number" value={sub[field] || ""} onChange={e => updateSubject(sKey, field, e.target.value)}
@@ -551,9 +551,9 @@ function TestTab({ tests, onSave, onDelete }) {
           ))}
         </div>
         {/* 順位（全体・男女別） */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
           {[["順位（全体）", "rankNum", "rankTotal"], ["男女別順位", "rankFNum", "rankFTotal"]].map(([lbl, numKey, totKey]) => (
-            <div key={lbl} style={{ flex: 1 }}>
+            <div key={lbl} style={{ width: "100%" }}>
               <div style={{ fontSize: 10, color: "#aaa", marginBottom: 4, fontWeight: 600 }}>{lbl}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input type="number" value={sub[numKey] || ""} onChange={e => updateSubject(sKey, numKey, e.target.value)}
@@ -725,7 +725,7 @@ function TestTab({ tests, onSave, onDelete }) {
                     <tr key={t.id} style={{ borderBottom: "1px solid #f0ece6", background: i % 2 === 0 ? "white" : "#FAFAFF" }}>
                       <td style={{ padding: "6px 4px", color: "#555", fontSize: 11 }}>
                         <div style={{ color: "#aaa", fontSize: 10 }}>{parseInt(pts[1])}/{parseInt(pts[2])}</div>
-                        <div style={{ fontWeight: 600, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.testName}</div>
+                        <div style={{ fontWeight: 600, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.schoolName || t.testName}</div>
                       </td>
                       {graphKeys.map(k => {
                         const dev = t.subjects?.[k]?.deviation;
@@ -1174,6 +1174,7 @@ export default function App() {
 
   const totalMinutes = records.reduce((a, r) => a + (r.studyMinutes || 0), 0);
   const totalHours = Math.floor(totalMinutes / 60);
+  const uniqueDays = new Set(records.map(r => r.date)).size;
   const streak = (() => {
     let s = 0;
     const todayStr = getJSTDateString();
@@ -1254,7 +1255,7 @@ export default function App() {
         {tab === "home" && (
           <>
             <div style={{ ...S.card, display: "flex", gap: 0 }}>
-              {[["累計時間", `${totalHours}h`], ["記録日数", `${records.length}日`], ["連続日数", `🔥${streak}`]].map(([label, val], i) => (
+              {[["累計時間", `${totalHours}h`], ["記録日数", `${uniqueDays}日`], ["連続日数", `🔥${streak}`]].map(([label, val], i) => (
                 <div key={i} style={{ flex: 1, textAlign: "center", borderRight: i < 2 ? "1px solid #f0ece6" : "none", padding: "4px 0" }}>
                   <div style={{ fontSize: 24, fontWeight: 900, color: "#FF8C42" }}>{val}</div>
                   <div style={{ fontSize: 10, color: "#aaa" }}>{label}</div>
