@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 
 const SUBJECTS = ["国語", "算数", "理科", "社会"];
 const SUBJECT_COLORS = { 算数: "#FF6B6B", 国語: "#4ECDC4", 理科: "#45B7D1", 社会: "#96CEB4" };
@@ -572,15 +572,110 @@ function ParentAdvice({ records, today }) {
   );
 }
 
-// ---- テスト結果タブ ----
-function TestTab({ tests, onSave, onDelete }) {
-  const [mode, setMode] = useState("list");
-  const [editTest, setEditTest] = useState(null);
+// ---- テスト入力フォーム（独立コンポーネント：再レンダリングでフォーカスが飛ばない） ----
+function TestEditForm({ initialData, onSave, onCancel }) {
+  const [data, setData] = useState(initialData);
+
+  const updateField = (field, val) => setData(prev => ({ ...prev, [field]: val }));
+  const updateSubject = useCallback((key, field, val) =>
+    setData(prev => ({ ...prev, subjects: { ...prev.subjects, [key]: { ...prev.subjects[key], [field]: val } } })),
+  []);
 
   const COMBINED = [
     { key: "2科目", label: "2科目合計", color: "#9B59B6", icon: "📘" },
     { key: "4科目", label: "4科目合計", color: "#E74C3C", icon: "📕" },
   ];
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <button onClick={onCancel} style={{ border: "none", background: "#f0ece6", borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#888" }}>← 戻る</button>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#7C5CBF" }}>📝 テスト結果を入力</div>
+      </div>
+      <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+        {/* 基本情報 */}
+        {[["date","📅 受験日","date"],["schoolName","🏫 塾名","text","例：〇〇進学塾"],["testName","📋 テスト名","text","例：第3回一斉学力テスト"]].map(([field,lbl,type,ph]) => (
+          <div key={field} style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>{lbl}</div>
+            <input type={type} value={data[field]} onChange={e => updateField(field, e.target.value)}
+              placeholder={ph} style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
+          </div>
+        ))}
+
+        {/* 科目別 */}
+        <div style={{ fontSize: 13, color: "#7C5CBF", marginBottom: 10, fontWeight: 700 }}>📊 科目別（未入力の科目はスキップ）</div>
+        {SUBJECTS.map(s => (
+          <SubjectInputBlock key={s} sKey={s} label={s} color={SUBJECT_COLORS[s]} icon={SUBJECT_ICONS[s]}
+            subData={data.subjects[s] || {}} onUpdate={updateSubject} />
+        ))}
+
+        {/* 2科目・4科目合計 */}
+        <div style={{ fontSize: 13, color: "#7C5CBF", marginBottom: 10, fontWeight: 700, marginTop: 4 }}>📊 合計成績（2科目・4科目）</div>
+        {COMBINED.map(c => (
+          <SubjectInputBlock key={c.key} sKey={c.key} label={c.label} color={c.color} icon={c.icon}
+            subData={data.subjects[c.key] || {}} onUpdate={updateSubject} />
+        ))}
+
+        {/* 全体コメント */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>💬 テスト全体のコメント</div>
+          <textarea value={data.overallComment} onChange={e => updateField("overallComment", e.target.value)}
+            placeholder="全体的な感想・反省・次回に向けてなど" rows={3}
+            style={{ width: "100%", borderRadius: 12, border: "2px solid #E8D5FF", padding: "10px 12px", fontSize: 14, fontFamily: "inherit", background: "#FAFAFF", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
+        </div>
+        <button onClick={() => onSave(data)} style={{ width: "100%", padding: "16px", background: "linear-gradient(135deg, #7C5CBF, #B39DDB)", border: "none", borderRadius: 16, color: "white", fontSize: 18, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(124,92,191,0.3)" }}>
+          📝 テスト結果を保存
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// 科目入力ブロック（メモ化で親の再レンダリングに影響されない）
+const SubjectInputBlock = React.memo(function SubjectInputBlock({ sKey, label, color, icon, subData, onUpdate }) {
+  const emptyS = { deviation: "", score: "", avg: "", rankNum: "", rankTotal: "", rankFNum: "", rankFTotal: "", comment: "" };
+  const sub = { ...emptyS, ...subData };
+  return (
+    <div style={{ background: color + "10", border: `2px solid ${color}33`, borderRadius: 14, padding: "12px 14px", marginBottom: 12 }}>
+      <div style={{ fontWeight: 700, color, marginBottom: 10, fontSize: 14 }}>{icon} {label}</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        {[["score","得点"],["avg","平均点"],["deviation","偏差値"]].map(([field, lbl]) => (
+          <div key={field} style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, color: "#aaa", marginBottom: 3, textAlign: "center" }}>{lbl}</div>
+            <input type="number" inputMode="numeric" value={sub[field]}
+              onChange={e => onUpdate(sKey, field, e.target.value)}
+              placeholder="—" style={{ width: "100%", padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+        {[["順位（全体）", "rankNum", "rankTotal"], ["男女別順位", "rankFNum", "rankFTotal"]].map(([lbl, numKey, totKey]) => (
+          <div key={lbl} style={{ width: "100%" }}>
+            <div style={{ fontSize: 10, color: "#aaa", marginBottom: 4, fontWeight: 600 }}>{lbl}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input type="number" inputMode="numeric" value={sub[numKey]}
+                onChange={e => onUpdate(sKey, numKey, e.target.value)}
+                placeholder="—" style={{ flex: 1, minWidth: 0, padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 14, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+              <span style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap" }}>位/</span>
+              <input type="number" inputMode="numeric" value={sub[totKey]}
+                onChange={e => onUpdate(sKey, totKey, e.target.value)}
+                placeholder="—" style={{ flex: 1, minWidth: 0, padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 14, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+              <span style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap" }}>人</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <textarea value={sub.comment} onChange={e => onUpdate(sKey, "comment", e.target.value)}
+        placeholder="コメント（任意）" rows={2}
+        style={{ width: "100%", borderRadius: 8, border: `2px solid ${color}22`, padding: "7px 10px", fontSize: 12, fontFamily: "inherit", background: "white", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
+    </div>
+  );
+});
+
+// ---- テスト結果タブ ----
+function TestTab({ tests, onSave, onDelete }) {
+  const [mode, setMode] = useState("list");
+  const [editTest, setEditTest] = useState(null);
 
   const emptySubject = () => ({ deviation: "", score: "", avg: "", rankNum: "", rankTotal: "", rankFNum: "", rankFTotal: "", comment: "" });
 
@@ -596,96 +691,14 @@ function TestTab({ tests, onSave, onDelete }) {
     overallComment: "",
   });
 
-  const handleSave = () => {
-    if (!editTest) return;
-    onSave(editTest);
+  const handleSave = (data) => {
+    onSave(data);
     setMode("list");
     setEditTest(null);
   };
 
-  const updateSubject = (key, field, val) =>
-    setEditTest(prev => ({ ...prev, subjects: { ...prev.subjects, [key]: { ...prev.subjects[key], [field]: val } } }));
-
-  const SubjectInputBlock = ({ sKey, label, color, icon }) => {
-    const sub = editTest.subjects[sKey] || emptySubject();
-    return (
-      <div style={{ background: color + "10", border: `2px solid ${color}33`, borderRadius: 14, padding: "12px 14px", marginBottom: 12 }}>
-        <div style={{ fontWeight: 700, color, marginBottom: 10, fontSize: 14 }}>{icon} {label}</div>
-        {/* 偏差値・得点・平均 */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          {[["score","得点",""],["avg","平均点",""],["deviation","偏差値",""]].map(([field, lbl]) => (
-            <div key={field} style={{ flex: 1 }}>
-              <div style={{ fontSize: 10, color: "#aaa", marginBottom: 3, textAlign: "center" }}>{lbl}</div>
-              <input type="number" value={sub[field] || ""} onChange={e => updateSubject(sKey, field, e.target.value)}
-                placeholder="—" style={{ width: "100%", padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
-            </div>
-          ))}
-        </div>
-        {/* 順位（全体・男女別） */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
-          {[["順位（全体）", "rankNum", "rankTotal"], ["男女別順位", "rankFNum", "rankFTotal"]].map(([lbl, numKey, totKey]) => (
-            <div key={lbl} style={{ width: "100%" }}>
-              <div style={{ fontSize: 10, color: "#aaa", marginBottom: 4, fontWeight: 600 }}>{lbl}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <input type="number" value={sub[numKey] || ""} onChange={e => updateSubject(sKey, numKey, e.target.value)}
-                  placeholder="—" style={{ flex: 1, minWidth: 0, padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 14, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
-                <span style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap" }}>位/</span>
-                <input type="number" value={sub[totKey] || ""} onChange={e => updateSubject(sKey, totKey, e.target.value)}
-                  placeholder="—" style={{ flex: 1, minWidth: 0, padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 14, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
-                <span style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap" }}>人</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <textarea value={sub.comment || ""} onChange={e => updateSubject(sKey, "comment", e.target.value)}
-          placeholder="コメント（任意）" rows={2}
-          style={{ width: "100%", borderRadius: 8, border: `2px solid ${color}22`, padding: "7px 10px", fontSize: 12, fontFamily: "inherit", background: "white", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
-      </div>
-    );
-  };
-
   if (mode === "add" && editTest) {
-    return (
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-          <button onClick={() => { setMode("list"); setEditTest(null); }} style={{ border: "none", background: "#f0ece6", borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#888" }}>← 戻る</button>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "#7C5CBF" }}>📝 テスト結果を入力</div>
-        </div>
-        <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
-          {/* 基本情報 */}
-          {[["date","📅 受験日","date",getJSTDateString()],["schoolName","🏫 塾名","text","例：〇〇進学塾"],["testName","📋 テスト名","text","例：第3回一斉学力テスト"]].map(([field,lbl,type,ph]) => (
-            <div key={field} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>{lbl}</div>
-              <input type={type} value={editTest[field]} onChange={e => setEditTest({...editTest, [field]: e.target.value})}
-                placeholder={ph} style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
-            </div>
-          ))}
-
-          {/* 科目別 */}
-          <div style={{ fontSize: 13, color: "#7C5CBF", marginBottom: 10, fontWeight: 700 }}>📊 科目別（未入力の科目はスキップ）</div>
-          {SUBJECTS.map(s => (
-            <SubjectInputBlock key={s} sKey={s} label={s} color={SUBJECT_COLORS[s]} icon={SUBJECT_ICONS[s]} />
-          ))}
-
-          {/* 2科目・4科目合計 */}
-          <div style={{ fontSize: 13, color: "#7C5CBF", marginBottom: 10, fontWeight: 700, marginTop: 4 }}>📊 合計成績（2科目・4科目）</div>
-          {COMBINED.map(c => (
-            <SubjectInputBlock key={c.key} sKey={c.key} label={c.label} color={c.color} icon={c.icon} />
-          ))}
-
-          {/* 全体コメント */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>💬 テスト全体のコメント</div>
-            <textarea value={editTest.overallComment} onChange={e => setEditTest({...editTest, overallComment: e.target.value})}
-              placeholder="全体的な感想・反省・次回に向けてなど" rows={3}
-              style={{ width: "100%", borderRadius: 12, border: "2px solid #E8D5FF", padding: "10px 12px", fontSize: 14, fontFamily: "inherit", background: "#FAFAFF", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
-          </div>
-          <button onClick={handleSave} style={{ width: "100%", padding: "16px", background: "linear-gradient(135deg, #7C5CBF, #B39DDB)", border: "none", borderRadius: 16, color: "white", fontSize: 18, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(124,92,191,0.3)" }}>
-            📝 テスト結果を保存
-          </button>
-        </div>
-      </div>
-    );
+    return <TestEditForm initialData={editTest} onSave={handleSave} onCancel={() => { setMode("list"); setEditTest(null); }} />;
   }
 
   // ---- リスト表示 ----
@@ -1258,11 +1271,11 @@ export default function App() {
   const hamsterMood = streak >= 7 ? 4 : streak >= 3 ? 3 : streak >= 1 ? 2 : todayTotal > 0 ? 1 : 0;
 
   const S = {
-    app: { maxWidth: 440, margin: "0 auto", minHeight: "100vh", background: "#FFFBF7", fontFamily: "'Hiragino Maru Gothic ProN', 'Noto Sans JP', sans-serif" },
+    app: { maxWidth: 440, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", background: "#FFFBF7", fontFamily: "'Hiragino Maru Gothic ProN', 'Noto Sans JP', sans-serif", overflow: "hidden", position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%" },
     header: { background: "linear-gradient(135deg, #FF8C42 0%, #FFB347 100%)", padding: "12px 16px 16px", position: "relative", overflow: "hidden" },
-    nav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 440, background: "white", borderTop: "1px solid #f0ece6", display: "flex", zIndex: 100, boxShadow: "0 -4px 20px rgba(0,0,0,0.08)" },
+    nav: { flexShrink: 0, background: "white", borderTop: "1px solid #f0ece6", display: "flex", zIndex: 100, boxShadow: "0 -4px 20px rgba(0,0,0,0.08)" },
     navBtn: (a) => ({ flex: 1, padding: "6px 2px 10px", border: "none", background: "none", color: a ? "#FF8C42" : "#bbb", fontSize: 9, fontWeight: a ? 700 : 400, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }),
-    content: { padding: "12px 16px 100px" },
+    content: { flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px 16px 80px", WebkitOverflowScrolling: "touch" },
     card: { background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" },
     title: (c) => ({ fontSize: 16, fontWeight: 800, color: c || "#444", marginBottom: 16 }),
     saveBtn: (bg) => ({ width: "100%", padding: "16px", background: bg || "linear-gradient(135deg, #FF8C42, #FF6B6B)", border: "none", borderRadius: 16, color: "white", fontSize: 18, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(255,107,107,0.3)", letterSpacing: 1, marginTop: 4 }),
