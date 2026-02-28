@@ -503,16 +503,25 @@ function ParentAdvice({ records, today }) {
 
 // ---- テスト結果タブ ----
 function TestTab({ tests, onSave, onDelete }) {
-  const [mode, setMode] = useState("list"); // "list" | "add" | "detail"
+  const [mode, setMode] = useState("list");
   const [editTest, setEditTest] = useState(null);
-  const [detailTest, setDetailTest] = useState(null);
+
+  const COMBINED = [
+    { key: "2科目", label: "2科目合計", color: "#9B59B6", icon: "📘" },
+    { key: "4科目", label: "4科目合計", color: "#E74C3C", icon: "📕" },
+  ];
+
+  const emptySubject = () => ({ deviation: "", score: "", avg: "", rankNum: "", rankTotal: "", rankFNum: "", rankFTotal: "", comment: "" });
 
   const emptyTest = () => ({
     id: Date.now().toString(),
     date: getJSTDateString(),
     schoolName: "",
     testName: "",
-    subjects: { 算数: { deviation: "", comment: "" }, 国語: { deviation: "", comment: "" }, 理科: { deviation: "", comment: "" }, 社会: { deviation: "", comment: "" } },
+    subjects: {
+      算数: emptySubject(), 国語: emptySubject(), 理科: emptySubject(), 社会: emptySubject(),
+      "2科目": emptySubject(), "4科目": emptySubject(),
+    },
     overallComment: "",
   });
 
@@ -523,7 +532,50 @@ function TestTab({ tests, onSave, onDelete }) {
     setEditTest(null);
   };
 
-  const activeSubjects = editTest ? SUBJECTS.filter(s => editTest.subjects[s]?.deviation !== "" || editTest.subjects[s]?.comment !== "") : [];
+  const updateSubject = (key, field, val) =>
+    setEditTest(prev => ({ ...prev, subjects: { ...prev.subjects, [key]: { ...prev.subjects[key], [field]: val } } }));
+
+  const SubjectInputBlock = ({ sKey, label, color, icon }) => {
+    const sub = editTest.subjects[sKey] || emptySubject();
+    return (
+      <div style={{ background: color + "10", border: `2px solid ${color}33`, borderRadius: 14, padding: "12px 14px", marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, color, marginBottom: 10, fontSize: 14 }}>{icon} {label}</div>
+        {/* 偏差値・得点・平均 */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          {[["deviation","偏差値",""],["score","得点",""],["avg","平均点",""]].map(([field, lbl]) => (
+            <div key={field} style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: "#aaa", marginBottom: 3, textAlign: "center" }}>{lbl}</div>
+              <input type="number" value={sub[field] || ""} onChange={e => updateSubject(sKey, field, e.target.value)}
+                placeholder="—" style={{ width: "100%", padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+            </div>
+          ))}
+        </div>
+        {/* 順位（全体） */}
+        <div style={{ fontSize: 11, color: "#aaa", marginBottom: 4, fontWeight: 600 }}>順位（全体）</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <input type="number" value={sub.rankNum || ""} onChange={e => updateSubject(sKey, "rankNum", e.target.value)}
+            placeholder="位" style={{ flex: 1, padding: "7px 8px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+          <span style={{ fontSize: 12, color: "#aaa" }}>位 /</span>
+          <input type="number" value={sub.rankTotal || ""} onChange={e => updateSubject(sKey, "rankTotal", e.target.value)}
+            placeholder="人中" style={{ flex: 1, padding: "7px 8px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+          <span style={{ fontSize: 12, color: "#aaa" }}>人中</span>
+        </div>
+        {/* 男女別順位 */}
+        <div style={{ fontSize: 11, color: "#aaa", marginBottom: 4, fontWeight: 600 }}>男女別順位</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <input type="number" value={sub.rankFNum || ""} onChange={e => updateSubject(sKey, "rankFNum", e.target.value)}
+            placeholder="位" style={{ flex: 1, padding: "7px 8px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+          <span style={{ fontSize: 12, color: "#aaa" }}>位 /</span>
+          <input type="number" value={sub.rankFTotal || ""} onChange={e => updateSubject(sKey, "rankFTotal", e.target.value)}
+            placeholder="人中" style={{ flex: 1, padding: "7px 8px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+          <span style={{ fontSize: 12, color: "#aaa" }}>人中</span>
+        </div>
+        <textarea value={sub.comment || ""} onChange={e => updateSubject(sKey, "comment", e.target.value)}
+          placeholder="コメント（任意）" rows={2}
+          style={{ width: "100%", borderRadius: 8, border: `2px solid ${color}22`, padding: "7px 10px", fontSize: 12, fontFamily: "inherit", background: "white", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
+      </div>
+    );
+  };
 
   if (mode === "add" && editTest) {
     return (
@@ -533,40 +585,28 @@ function TestTab({ tests, onSave, onDelete }) {
           <div style={{ fontSize: 16, fontWeight: 800, color: "#7C5CBF" }}>📝 テスト結果を入力</div>
         </div>
         <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>📅 受験日</div>
-            <input type="date" value={editTest.date} onChange={e => setEditTest({...editTest, date: e.target.value})}
-              style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>🏫 塾名</div>
-            <input type="text" value={editTest.schoolName} onChange={e => setEditTest({...editTest, schoolName: e.target.value})}
-              placeholder="例：〇〇進学塾" style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>📋 テスト名</div>
-            <input type="text" value={editTest.testName} onChange={e => setEditTest({...editTest, testName: e.target.value})}
-              placeholder="例：第3回一斉学力テスト" style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
-          </div>
-
-          <div style={{ fontSize: 13, color: "#888", marginBottom: 10, fontWeight: 600 }}>📊 科目別偏差値（入力した科目のみ記録されます）</div>
-          {SUBJECTS.map(s => (
-            <div key={s} style={{ background: SUBJECT_COLORS[s]+"10", border: `2px solid ${SUBJECT_COLORS[s]}33`, borderRadius: 14, padding: "12px 14px", marginBottom: 10 }}>
-              <div style={{ fontWeight: 700, color: SUBJECT_COLORS[s], marginBottom: 8, fontSize: 14 }}>{SUBJECT_ICONS[s]} {s}</div>
-              <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, color: "#aaa", marginBottom: 4 }}>偏差値</div>
-                  <input type="number" min="20" max="80" value={editTest.subjects[s]?.deviation || ""}
-                    onChange={e => setEditTest({...editTest, subjects: {...editTest.subjects, [s]: {...editTest.subjects[s], deviation: e.target.value}}})}
-                    placeholder="例：55" style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: `2px solid ${SUBJECT_COLORS[s]}44`, fontSize: 16, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
-                </div>
-              </div>
-              <textarea value={editTest.subjects[s]?.comment || ""} onChange={e => setEditTest({...editTest, subjects: {...editTest.subjects, [s]: {...editTest.subjects[s], comment: e.target.value}}})}
-                placeholder="コメント（任意）" rows={2}
-                style={{ width: "100%", borderRadius: 10, border: `2px solid ${SUBJECT_COLORS[s]}33`, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", background: "white", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
+          {/* 基本情報 */}
+          {[["date","📅 受験日","date",getJSTDateString()],["schoolName","🏫 塾名","text","例：〇〇進学塾"],["testName","📋 テスト名","text","例：第3回一斉学力テスト"]].map(([field,lbl,type,ph]) => (
+            <div key={field} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>{lbl}</div>
+              <input type={type} value={editTest[field]} onChange={e => setEditTest({...editTest, [field]: e.target.value})}
+                placeholder={ph} style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
             </div>
           ))}
 
+          {/* 科目別 */}
+          <div style={{ fontSize: 13, color: "#7C5CBF", marginBottom: 10, fontWeight: 700 }}>📊 科目別（未入力の科目はスキップ）</div>
+          {SUBJECTS.map(s => (
+            <SubjectInputBlock key={s} sKey={s} label={s} color={SUBJECT_COLORS[s]} icon={SUBJECT_ICONS[s]} />
+          ))}
+
+          {/* 2科目・4科目合計 */}
+          <div style={{ fontSize: 13, color: "#7C5CBF", marginBottom: 10, fontWeight: 700, marginTop: 4 }}>📊 合計成績（2科目・4科目）</div>
+          {COMBINED.map(c => (
+            <SubjectInputBlock key={c.key} sKey={c.key} label={c.label} color={c.color} icon={c.icon} />
+          ))}
+
+          {/* 全体コメント */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>💬 テスト全体のコメント</div>
             <textarea value={editTest.overallComment} onChange={e => setEditTest({...editTest, overallComment: e.target.value})}
@@ -581,13 +621,17 @@ function TestTab({ tests, onSave, onDelete }) {
     );
   }
 
-  // 偏差値グラフ
+  // ---- リスト表示 ----
   const sortedTests = [...tests].sort((a,b) => a.date.localeCompare(b.date));
-  const graphSubjects = SUBJECTS.filter(s => sortedTests.some(t => t.subjects?.[s]?.deviation));
-  const allDeviations = sortedTests.flatMap(t => SUBJECTS.map(s => parseFloat(t.subjects?.[s]?.deviation)||0)).filter(v=>v>0);
-  const minDev = Math.max(20, Math.min(...allDeviations) - 5);
-  const maxDev = Math.min(80, Math.max(...allDeviations) + 5);
-  const GRAPH_H = 140;
+  const ALL_KEYS = [...SUBJECTS, "2科目", "4科目"];
+  const ALL_COLORS = { ...SUBJECT_COLORS, "2科目": "#9B59B6", "4科目": "#E74C3C" };
+  const ALL_ICONS = { ...SUBJECT_ICONS, "2科目": "📘", "4科目": "📕" };
+
+  const graphKeys = ALL_KEYS.filter(k => sortedTests.some(t => t.subjects?.[k]?.deviation));
+  const allDevs = sortedTests.flatMap(t => ALL_KEYS.map(k => parseFloat(t.subjects?.[k]?.deviation)||0)).filter(v=>v>0);
+  const minDev = allDevs.length ? Math.max(20, Math.min(...allDevs) - 5) : 30;
+  const maxDev = allDevs.length ? Math.min(80, Math.max(...allDevs) + 5) : 70;
+  const GRAPH_H = 150;
 
   return (
     <div>
@@ -607,13 +651,12 @@ function TestTab({ tests, onSave, onDelete }) {
       ) : (
         <>
           {/* 偏差値推移グラフ */}
-          {sortedTests.length > 0 && graphSubjects.length > 0 && (
+          {graphKeys.length > 0 && (
             <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 12 }}>📈 偏差値推移</div>
               <div style={{ position: "relative", height: GRAPH_H + 24, marginLeft: 28 }}>
-                {/* Y軸グリッド */}
                 {[minDev, Math.round((minDev+maxDev)/2), maxDev].map(v => {
-                  const y = GRAPH_H - ((v - minDev) / (maxDev - minDev)) * GRAPH_H;
+                  const y = GRAPH_H - ((v - minDev) / Math.max(1, maxDev - minDev)) * GRAPH_H;
                   return (
                     <div key={v} style={{ position: "absolute", left: -28, right: 0, top: y }}>
                       <span style={{ fontSize: 9, color: "#ccc", position: "absolute", left: 0 }}>{v}</span>
@@ -621,75 +664,77 @@ function TestTab({ tests, onSave, onDelete }) {
                     </div>
                   );
                 })}
-                {/* 折れ線 */}
-                <svg style={{ position: "absolute", top: 0, left: 20, right: 0, width: "calc(100%)", height: GRAPH_H }} viewBox={`0 0 ${Math.max(1, sortedTests.length-1) * 60 + 20} ${GRAPH_H}`} preserveAspectRatio="none">
-                  {graphSubjects.map(s => {
-                    const points = sortedTests.map((t, i) => {
-                      const dev = parseFloat(t.subjects?.[s]?.deviation);
+                <svg style={{ position: "absolute", top: 0, left: 20, width: "calc(100% - 0px)", height: GRAPH_H }}
+                  viewBox={`0 0 ${Math.max(1, sortedTests.length - 1) * 70 + 20} ${GRAPH_H}`} preserveAspectRatio="none">
+                  {graphKeys.map(k => {
+                    const pts = sortedTests.map((t, i) => {
+                      const dev = parseFloat(t.subjects?.[k]?.deviation);
                       if (!dev) return null;
-                      const x = sortedTests.length === 1 ? 10 : i * ((Math.max(1,sortedTests.length-1)*60+20-20)/(sortedTests.length-1)) + 10;
+                      const x = sortedTests.length === 1 ? 10 : i * (Math.max(1, sortedTests.length - 1) * 70 / Math.max(1, sortedTests.length - 1)) * (i / Math.max(1, sortedTests.length - 1)) + 10;
+                      const xi = sortedTests.length === 1 ? 10 : (i / Math.max(1, sortedTests.length - 1)) * (Math.max(1, sortedTests.length - 1) * 70) + 10;
                       const y = GRAPH_H - ((dev - minDev) / Math.max(1, maxDev - minDev)) * GRAPH_H;
-                      return { x, y, dev };
+                      return { x: xi, y, dev };
                     });
-                    const valid = points.filter(Boolean);
+                    const valid = pts.filter(Boolean);
                     return (
-                      <g key={s}>
+                      <g key={k}>
                         {valid.length > 1 && valid.map((p, i) => i > 0 ? (
                           <line key={i} x1={valid[i-1].x} y1={valid[i-1].y} x2={p.x} y2={p.y}
-                            stroke={SUBJECT_COLORS[s]} strokeWidth="2" strokeLinecap="round" />
+                            stroke={ALL_COLORS[k]} strokeWidth="2.5" strokeLinecap="round"
+                            strokeDasharray={k === "2科目" || k === "4科目" ? "5,3" : "none"} />
                         ) : null)}
                         {valid.map((p, i) => (
                           <g key={i}>
-                            <circle cx={p.x} cy={p.y} r="5" fill={SUBJECT_COLORS[s]} />
-                            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="9" fill={SUBJECT_COLORS[s]} fontWeight="bold">{p.dev}</text>
+                            <circle cx={p.x} cy={p.y} r="5" fill={ALL_COLORS[k]} />
+                            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="9" fill={ALL_COLORS[k]} fontWeight="bold">{p.dev}</text>
                           </g>
                         ))}
                       </g>
                     );
                   })}
                 </svg>
-                {/* X軸ラベル */}
                 <div style={{ position: "absolute", top: GRAPH_H + 4, left: 20, right: 0, display: "flex", justifyContent: sortedTests.length === 1 ? "center" : "space-between" }}>
                   {sortedTests.map((t, i) => {
-                    const parts = t.date.split("-");
-                    return <div key={i} style={{ fontSize: 9, color: "#aaa", textAlign: "center" }}>{parseInt(parts[1])}/{parseInt(parts[2])}</div>;
+                    const pts = t.date.split("-");
+                    return <div key={i} style={{ fontSize: 9, color: "#aaa", textAlign: "center" }}>{parseInt(pts[1])}/{parseInt(pts[2])}</div>;
                   })}
                 </div>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
-                {graphSubjects.map(s => (
-                  <span key={s} style={{ fontSize: 11, color: SUBJECT_COLORS[s], fontWeight: 700 }}>
-                    ● {s}
+                {graphKeys.map(k => (
+                  <span key={k} style={{ fontSize: 11, color: ALL_COLORS[k], fontWeight: 700 }}>
+                    {k === "2科目" || k === "4科目" ? "- -" : "●"} {k}
                   </span>
                 ))}
               </div>
             </div>
           )}
 
-          {/* テスト一覧表 */}
+          {/* 結果一覧表（偏差値のみ） */}
           <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflowX: "auto" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 12 }}>📋 結果一覧</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 12 }}>📋 偏差値一覧</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 300 }}>
               <thead>
                 <tr style={{ background: "#7C5CBF11" }}>
-                  <th style={{ padding: "8px 6px", textAlign: "left", color: "#7C5CBF", borderBottom: "2px solid #E8D5FF", whiteSpace: "nowrap" }}>日付</th>
-                  <th style={{ padding: "8px 6px", textAlign: "left", color: "#7C5CBF", borderBottom: "2px solid #E8D5FF", whiteSpace: "nowrap" }}>テスト名</th>
-                  {SUBJECTS.filter(s => sortedTests.some(t => t.subjects?.[s]?.deviation)).map(s => (
-                    <th key={s} style={{ padding: "8px 6px", textAlign: "center", color: SUBJECT_COLORS[s], borderBottom: "2px solid #E8D5FF", whiteSpace: "nowrap" }}>{SUBJECT_ICONS[s]}{s}</th>
+                  <th style={{ padding: "6px 4px", textAlign: "left", color: "#7C5CBF", borderBottom: "2px solid #E8D5FF", fontSize: 11 }}>日付・テスト名</th>
+                  {graphKeys.map(k => (
+                    <th key={k} style={{ padding: "6px 4px", textAlign: "center", color: ALL_COLORS[k], borderBottom: "2px solid #E8D5FF", fontSize: 11, whiteSpace: "nowrap" }}>{ALL_ICONS[k]}{k}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {[...sortedTests].reverse().map((t, i) => {
-                  const parts = t.date.split("-");
+                  const pts = t.date.split("-");
                   return (
                     <tr key={t.id} style={{ borderBottom: "1px solid #f0ece6", background: i % 2 === 0 ? "white" : "#FAFAFF" }}>
-                      <td style={{ padding: "8px 6px", whiteSpace: "nowrap", color: "#888" }}>{parseInt(parts[1])}/{parseInt(parts[2])}</td>
-                      <td style={{ padding: "8px 6px", color: "#555", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.testName}</td>
-                      {SUBJECTS.filter(s => sortedTests.some(tt => tt.subjects?.[s]?.deviation)).map(s => {
-                        const dev = t.subjects?.[s]?.deviation;
+                      <td style={{ padding: "6px 4px", color: "#555", fontSize: 11 }}>
+                        <div style={{ color: "#aaa", fontSize: 10 }}>{parseInt(pts[1])}/{parseInt(pts[2])}</div>
+                        <div style={{ fontWeight: 600, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.testName}</div>
+                      </td>
+                      {graphKeys.map(k => {
+                        const dev = t.subjects?.[k]?.deviation;
                         return (
-                          <td key={s} style={{ padding: "8px 6px", textAlign: "center", fontWeight: dev ? 700 : 400, color: dev ? SUBJECT_COLORS[s] : "#ddd" }}>
+                          <td key={k} style={{ padding: "6px 4px", textAlign: "center", fontWeight: dev ? 700 : 400, color: dev ? ALL_COLORS[k] : "#ddd", fontSize: 13 }}>
                             {dev || "—"}
                           </td>
                         );
@@ -703,7 +748,8 @@ function TestTab({ tests, onSave, onDelete }) {
 
           {/* テスト詳細カード */}
           {[...sortedTests].reverse().map(t => (
-            <TestCard key={t.id} test={t} onDelete={onDelete} onEdit={() => { setEditTest({...t}); setMode("add"); }} />
+            <TestCard key={t.id} test={t} onDelete={onDelete} onEdit={() => { setEditTest({ ...emptyTest(), ...t, subjects: { ...emptyTest().subjects, ...t.subjects } }); setMode("add"); }}
+              allColors={ALL_COLORS} allIcons={ALL_ICONS} />
           ))}
         </>
       )}
@@ -711,12 +757,23 @@ function TestTab({ tests, onSave, onDelete }) {
   );
 }
 
-function TestCard({ test, onDelete, onEdit }) {
+function TestCard({ test, onDelete, onEdit, allColors = {}, allIcons = {} }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const parts = test.date.split("-");
   const dateStr = `${parseInt(parts[0])}年${parseInt(parts[1])}月${parseInt(parts[2])}日`;
-  const filledSubjects = SUBJECTS.filter(s => test.subjects?.[s]?.deviation);
+  const ALL_KEYS = [...SUBJECTS, "2科目", "4科目"];
+  const colors = { ...SUBJECT_COLORS, "2科目": "#9B59B6", "4科目": "#E74C3C", ...allColors };
+  const icons = { ...SUBJECT_ICONS, "2科目": "📘", "4科目": "📕", ...allIcons };
+  const filledKeys = ALL_KEYS.filter(k => test.subjects?.[k]?.deviation || test.subjects?.[k]?.score);
+
+  const fmt = (sub) => {
+    const parts = [];
+    if (sub.deviation) parts.push(`偏差値${sub.deviation}`);
+    if (sub.score) parts.push(`${sub.score}点`);
+    if (sub.avg) parts.push(`(平均${sub.avg})`);
+    return parts.join(" ");
+  };
 
   return (
     <div style={{ background: "white", borderRadius: 16, padding: "14px 16px", marginBottom: 10, boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #E8D5FF" }}>
@@ -724,10 +781,10 @@ function TestCard({ test, onDelete, onEdit }) {
         <div style={{ fontSize: 22 }}>📝</div>
         <div style={{ flex: 1, cursor: "pointer" }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#555" }}>{test.testName || "（テスト名未入力）"}</div>
-          <div style={{ fontSize: 11, color: "#aaa" }}>{dateStr} {test.schoolName && `· ${test.schoolName}`}</div>
+          <div style={{ fontSize: 11, color: "#aaa" }}>{dateStr}{test.schoolName && ` · ${test.schoolName}`}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-            {filledSubjects.map(s => (
-              <span key={s} style={{ fontSize: 12, fontWeight: 700, color: SUBJECT_COLORS[s] }}>{SUBJECT_ICONS[s]}{test.subjects[s].deviation}</span>
+            {filledKeys.slice(0,4).map(k => (
+              <span key={k} style={{ fontSize: 11, fontWeight: 700, color: colors[k] }}>{icons[k]}{test.subjects[k].deviation || test.subjects[k].score}</span>
             ))}
           </div>
         </div>
@@ -746,16 +803,24 @@ function TestCard({ test, onDelete, onEdit }) {
       )}
       {expanded && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #E8D5FF" }}>
-          {SUBJECTS.filter(s => test.subjects?.[s]?.deviation || test.subjects?.[s]?.comment).map(s => (
-            <div key={s} style={{ marginBottom: 10, background: SUBJECT_COLORS[s]+"10", borderRadius: 10, padding: "8px 12px" }}>
-              <div style={{ fontWeight: 700, color: SUBJECT_COLORS[s], fontSize: 13, marginBottom: 4 }}>
-                {SUBJECT_ICONS[s]} {s} {test.subjects[s]?.deviation && <span>偏差値 {test.subjects[s].deviation}</span>}
+          {ALL_KEYS.filter(k => test.subjects?.[k]?.deviation || test.subjects?.[k]?.score || test.subjects?.[k]?.comment).map(k => {
+            const sub = test.subjects[k];
+            return (
+              <div key={k} style={{ marginBottom: 10, background: colors[k]+"12", borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ fontWeight: 700, color: colors[k], fontSize: 13, marginBottom: 6 }}>{icons[k]} {k}</div>
+                {/* 数値行 */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: sub.comment ? 6 : 0 }}>
+                  {sub.deviation && <span style={{ fontSize: 13, color: "#555" }}>偏差値 <strong style={{ color: colors[k] }}>{sub.deviation}</strong></span>}
+                  {sub.score && <span style={{ fontSize: 13, color: "#555" }}>得点 <strong>{sub.score}</strong>{sub.avg && <span style={{ color: "#aaa", fontSize: 11 }}>（平均{sub.avg}）</span>}</span>}
+                  {sub.rankNum && sub.rankTotal && <span style={{ fontSize: 13, color: "#555" }}>全体 <strong>{sub.rankNum}</strong>/{sub.rankTotal}位</span>}
+                  {sub.rankFNum && sub.rankFTotal && <span style={{ fontSize: 13, color: "#555" }}>男女別 <strong>{sub.rankFNum}</strong>/{sub.rankFTotal}位</span>}
+                </div>
+                {sub.comment && <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>{sub.comment}</div>}
               </div>
-              {test.subjects[s]?.comment && <div style={{ fontSize: 12, color: "#777" }}>{test.subjects[s].comment}</div>}
-            </div>
-          ))}
+            );
+          })}
           {test.overallComment && (
-            <div style={{ background: "#F8F5FF", borderRadius: 10, padding: "8px 12px", fontSize: 12, color: "#666", lineHeight: 1.7 }}>
+            <div style={{ background: "#F8F5FF", borderRadius: 10, padding: "10px 12px", fontSize: 12, color: "#666", lineHeight: 1.7 }}>
               💬 {test.overallComment}
             </div>
           )}
