@@ -308,7 +308,9 @@ function BarChart({ records }) {
           {/* 棒グラフ */}
           <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: CHART_HEIGHT, paddingBottom: 20 }}>
             {days.map((date) => {
-              const [dy, dm, dd] = date.split("-").map(Number);
+              const dateParts = date.split("-");
+              const dm = parseInt(dateParts[1], 10);
+              const dd = parseInt(dateParts[2], 10);
               const slots = dayMap[date];
               const total = (slots.朝 || 0) + (slots.昼 || 0) + (slots.夜 || 0);
               const totalLabel = total >= 60 ? `${Math.floor(total/60)}h${total%60>0?total%60+'分':''}` : `${total}分`;
@@ -353,7 +355,9 @@ function MentalChart({ records }) {
       <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontWeight: 600 }}>💝 メンタル推移</div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {last7.map((r, i) => {
-          const [, mm, md] = (r.date || "").split("-").map(Number);
+          const dateParts2 = (r.date || "").split("-");
+          const mm = parseInt(dateParts2[1], 10) || 0;
+          const md = parseInt(dateParts2[2], 10) || 0;
           const cm = r.child?.気持ち || 0;
           const pm = r.parent?.気持ち || 0;
           return (
@@ -429,11 +433,346 @@ function CheckChart({ records }) {
   );
 }
 
+// ---- 声かけヒント（傾向分析アドバイス） ----
+function ParentAdvice({ records, today }) {
+  const recent = records.slice(-7);
+  if (recent.length === 0) return (
+    <div style={{ background: "#F0FAFA", borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 12, color: "#4ECDC4", lineHeight: 1.7 }}>
+      💡 <strong>声かけヒント：</strong><br />結果より過程を褒めましょう。努力を認める言葉が子どものやる気につながります。
+    </div>
+  );
+
+  const advices = [];
+
+  // 子どもの気持ち平均
+  const childMoods = recent.filter(r => r.child?.気持ち > 0).map(r => r.child.気持ち);
+  const avgChildMood = childMoods.length ? childMoods.reduce((a,b)=>a+b,0)/childMoods.length : 0;
+
+  // 保護者の気持ち平均
+  const parentMoods = recent.filter(r => r.parent?.気持ち > 0).map(r => r.parent.気持ち);
+  const avgParentMood = parentMoods.length ? parentMoods.reduce((a,b)=>a+b,0)/parentMoods.length : 0;
+
+  // 自信度平均
+  const confidence = recent.filter(r => r.child?.自信度 > 0).map(r => r.child.自信度);
+  const avgConf = confidence.length ? confidence.reduce((a,b)=>a+b,0)/confidence.length : 0;
+
+  // 勉強時間の科目偏り
+  const subjectTotals = { 算数: 0, 国語: 0, 理科: 0, 社会: 0 };
+  recent.forEach(r => {
+    if (r.subjectMinutes) {
+      SUBJECTS.forEach(s => { subjectTotals[s] += r.subjectMinutes[s] || 0; });
+    } else {
+      const subs = r.subjects || [];
+      const t = subs.length ? (r.studyMinutes||0)/subs.length : 0;
+      subs.forEach(s => { if (subjectTotals[s]!==undefined) subjectTotals[s]+=t; });
+    }
+  });
+  const maxSubject = Object.entries(subjectTotals).sort((a,b)=>b[1]-a[1]);
+  const zeroSubjects = maxSubject.filter(([,v])=>v===0).map(([k])=>k);
+  const topSubject = maxSubject[0][1] > 0 ? maxSubject[0][0] : null;
+
+  // すれ違い検出（子ども気持ち↑ 保護者気持ち↓ or逆）
+  if (avgChildMood > 0 && avgParentMood > 0) {
+    const diff = avgChildMood - avgParentMood;
+    if (diff >= 1.5) advices.push("🔍 お子さんは楽しく取り組めていますが、保護者のみなさんは少し心配気味かもしれません。お子さんの気持ちをそのまま受け止めてあげましょう。");
+    else if (diff <= -1.5) advices.push("🤝 保護者は前向きに見守っていますが、お子さんが内心しんどさを感じているかもしれません。「何が難しい？」と聞いてみましょう。");
+    else advices.push("😊 親子の気持ちがよく合っています！この調子でコミュニケーションを続けてください。");
+  }
+
+  // 自信度が低い
+  if (avgConf > 0 && avgConf < 2.5) advices.push("💪 最近自信度が低め(" + avgConf.toFixed(1) + "/5)です。「できたこと」に注目して、小さな成功を一緒に喜びましょう。");
+  else if (avgConf >= 4) advices.push("🌟 自信度がとても高いです！難しい問題にも挑戦する気持ちが育っています。");
+
+  // 勉強時間の偏り
+  if (zeroSubjects.length > 0) advices.push(`📚 この7日間で ${zeroSubjects.join("・")} の記録がありません。バランスよく取り組めるよう一緒に計画を立ててみましょう。`);
+  else if (topSubject) advices.push(`🔢 最近は${topSubject}に一番時間をかけています。得意を伸ばしつつ、他の科目も少しずつ。`);
+
+  // 体調チェック
+  const条件 = recent.filter(r => r.dailyChecks?.sleep);
+  if (条件.length < recent.length * 0.5) advices.push("😴 睡眠チェックの達成率が低めです。受験期の体調管理はとても大切！早寝早起きを心がけましょう。");
+
+  return (
+    <div style={{ background: "#F0FAFA", borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 12, lineHeight: 1.8 }}>
+      <div style={{ fontWeight: 700, color: "#4ECDC4", marginBottom: 8, fontSize: 13 }}>💡 直近7日の傾向アドバイス</div>
+      {advices.map((a, i) => (
+        <div key={i} style={{ marginBottom: i < advices.length-1 ? 8 : 0, color: "#555", paddingLeft: 4, borderLeft: "3px solid #4ECDC444", paddingLeft: 8 }}>{a}</div>
+      ))}
+    </div>
+  );
+}
+
+// ---- テスト結果タブ ----
+function TestTab({ tests, onSave, onDelete }) {
+  const [mode, setMode] = useState("list"); // "list" | "add" | "detail"
+  const [editTest, setEditTest] = useState(null);
+  const [detailTest, setDetailTest] = useState(null);
+
+  const emptyTest = () => ({
+    id: Date.now().toString(),
+    date: getJSTDateString(),
+    schoolName: "",
+    testName: "",
+    subjects: { 算数: { deviation: "", comment: "" }, 国語: { deviation: "", comment: "" }, 理科: { deviation: "", comment: "" }, 社会: { deviation: "", comment: "" } },
+    overallComment: "",
+  });
+
+  const handleSave = () => {
+    if (!editTest) return;
+    onSave(editTest);
+    setMode("list");
+    setEditTest(null);
+  };
+
+  const activeSubjects = editTest ? SUBJECTS.filter(s => editTest.subjects[s]?.deviation !== "" || editTest.subjects[s]?.comment !== "") : [];
+
+  if (mode === "add" && editTest) {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <button onClick={() => { setMode("list"); setEditTest(null); }} style={{ border: "none", background: "#f0ece6", borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: "#888" }}>← 戻る</button>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#7C5CBF" }}>📝 テスト結果を入力</div>
+        </div>
+        <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>📅 受験日</div>
+            <input type="date" value={editTest.date} onChange={e => setEditTest({...editTest, date: e.target.value})}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>🏫 塾名</div>
+            <input type="text" value={editTest.schoolName} onChange={e => setEditTest({...editTest, schoolName: e.target.value})}
+              placeholder="例：〇〇進学塾" style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>📋 テスト名</div>
+            <input type="text" value={editTest.testName} onChange={e => setEditTest({...editTest, testName: e.target.value})}
+              placeholder="例：第3回一斉学力テスト" style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "2px solid #E8D5FF", fontSize: 14, background: "#FAFAFF", boxSizing: "border-box", outline: "none" }} />
+          </div>
+
+          <div style={{ fontSize: 13, color: "#888", marginBottom: 10, fontWeight: 600 }}>📊 科目別偏差値（入力した科目のみ記録されます）</div>
+          {SUBJECTS.map(s => (
+            <div key={s} style={{ background: SUBJECT_COLORS[s]+"10", border: `2px solid ${SUBJECT_COLORS[s]}33`, borderRadius: 14, padding: "12px 14px", marginBottom: 10 }}>
+              <div style={{ fontWeight: 700, color: SUBJECT_COLORS[s], marginBottom: 8, fontSize: 14 }}>{SUBJECT_ICONS[s]} {s}</div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: "#aaa", marginBottom: 4 }}>偏差値</div>
+                  <input type="number" min="20" max="80" value={editTest.subjects[s]?.deviation || ""}
+                    onChange={e => setEditTest({...editTest, subjects: {...editTest.subjects, [s]: {...editTest.subjects[s], deviation: e.target.value}}})}
+                    placeholder="例：55" style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: `2px solid ${SUBJECT_COLORS[s]}44`, fontSize: 16, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+                </div>
+              </div>
+              <textarea value={editTest.subjects[s]?.comment || ""} onChange={e => setEditTest({...editTest, subjects: {...editTest.subjects, [s]: {...editTest.subjects[s], comment: e.target.value}}})}
+                placeholder="コメント（任意）" rows={2}
+                style={{ width: "100%", borderRadius: 10, border: `2px solid ${SUBJECT_COLORS[s]}33`, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", background: "white", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
+            </div>
+          ))}
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 6, fontWeight: 600 }}>💬 テスト全体のコメント</div>
+            <textarea value={editTest.overallComment} onChange={e => setEditTest({...editTest, overallComment: e.target.value})}
+              placeholder="全体的な感想・反省・次回に向けてなど" rows={3}
+              style={{ width: "100%", borderRadius: 12, border: "2px solid #E8D5FF", padding: "10px 12px", fontSize: 14, fontFamily: "inherit", background: "#FAFAFF", resize: "vertical", boxSizing: "border-box", outline: "none" }} />
+          </div>
+          <button onClick={handleSave} style={{ width: "100%", padding: "16px", background: "linear-gradient(135deg, #7C5CBF, #B39DDB)", border: "none", borderRadius: 16, color: "white", fontSize: 18, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(124,92,191,0.3)" }}>
+            📝 テスト結果を保存
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 偏差値グラフ
+  const sortedTests = [...tests].sort((a,b) => a.date.localeCompare(b.date));
+  const graphSubjects = SUBJECTS.filter(s => sortedTests.some(t => t.subjects?.[s]?.deviation));
+  const allDeviations = sortedTests.flatMap(t => SUBJECTS.map(s => parseFloat(t.subjects?.[s]?.deviation)||0)).filter(v=>v>0);
+  const minDev = Math.max(20, Math.min(...allDeviations) - 5);
+  const maxDev = Math.min(80, Math.max(...allDeviations) + 5);
+  const GRAPH_H = 140;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#7C5CBF" }}>📝 テスト結果</div>
+        <button onClick={() => { setEditTest(emptyTest()); setMode("add"); }}
+          style={{ background: "linear-gradient(135deg, #7C5CBF, #B39DDB)", border: "none", borderRadius: 12, padding: "8px 16px", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+          ＋ 追加
+        </button>
+      </div>
+
+      {tests.length === 0 ? (
+        <div style={{ background: "white", borderRadius: 20, padding: 40, textAlign: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>
+          <div style={{ color: "#bbb", fontSize: 14 }}>テスト結果を追加してみよう！</div>
+        </div>
+      ) : (
+        <>
+          {/* 偏差値推移グラフ */}
+          {sortedTests.length > 0 && graphSubjects.length > 0 && (
+            <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 12 }}>📈 偏差値推移</div>
+              <div style={{ position: "relative", height: GRAPH_H + 24, marginLeft: 28 }}>
+                {/* Y軸グリッド */}
+                {[minDev, Math.round((minDev+maxDev)/2), maxDev].map(v => {
+                  const y = GRAPH_H - ((v - minDev) / (maxDev - minDev)) * GRAPH_H;
+                  return (
+                    <div key={v} style={{ position: "absolute", left: -28, right: 0, top: y }}>
+                      <span style={{ fontSize: 9, color: "#ccc", position: "absolute", left: 0 }}>{v}</span>
+                      <div style={{ position: "absolute", left: 20, right: 0, height: 1, background: "#f0ece6" }} />
+                    </div>
+                  );
+                })}
+                {/* 折れ線 */}
+                <svg style={{ position: "absolute", top: 0, left: 20, right: 0, width: "calc(100%)", height: GRAPH_H }} viewBox={`0 0 ${Math.max(1, sortedTests.length-1) * 60 + 20} ${GRAPH_H}`} preserveAspectRatio="none">
+                  {graphSubjects.map(s => {
+                    const points = sortedTests.map((t, i) => {
+                      const dev = parseFloat(t.subjects?.[s]?.deviation);
+                      if (!dev) return null;
+                      const x = sortedTests.length === 1 ? 10 : i * ((Math.max(1,sortedTests.length-1)*60+20-20)/(sortedTests.length-1)) + 10;
+                      const y = GRAPH_H - ((dev - minDev) / Math.max(1, maxDev - minDev)) * GRAPH_H;
+                      return { x, y, dev };
+                    });
+                    const valid = points.filter(Boolean);
+                    return (
+                      <g key={s}>
+                        {valid.length > 1 && valid.map((p, i) => i > 0 ? (
+                          <line key={i} x1={valid[i-1].x} y1={valid[i-1].y} x2={p.x} y2={p.y}
+                            stroke={SUBJECT_COLORS[s]} strokeWidth="2" strokeLinecap="round" />
+                        ) : null)}
+                        {valid.map((p, i) => (
+                          <g key={i}>
+                            <circle cx={p.x} cy={p.y} r="5" fill={SUBJECT_COLORS[s]} />
+                            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="9" fill={SUBJECT_COLORS[s]} fontWeight="bold">{p.dev}</text>
+                          </g>
+                        ))}
+                      </g>
+                    );
+                  })}
+                </svg>
+                {/* X軸ラベル */}
+                <div style={{ position: "absolute", top: GRAPH_H + 4, left: 20, right: 0, display: "flex", justifyContent: sortedTests.length === 1 ? "center" : "space-between" }}>
+                  {sortedTests.map((t, i) => {
+                    const parts = t.date.split("-");
+                    return <div key={i} style={{ fontSize: 9, color: "#aaa", textAlign: "center" }}>{parseInt(parts[1])}/{parseInt(parts[2])}</div>;
+                  })}
+                </div>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
+                {graphSubjects.map(s => (
+                  <span key={s} style={{ fontSize: 11, color: SUBJECT_COLORS[s], fontWeight: 700 }}>
+                    ● {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* テスト一覧表 */}
+          <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflowX: "auto" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 12 }}>📋 結果一覧</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: "#7C5CBF11" }}>
+                  <th style={{ padding: "8px 6px", textAlign: "left", color: "#7C5CBF", borderBottom: "2px solid #E8D5FF", whiteSpace: "nowrap" }}>日付</th>
+                  <th style={{ padding: "8px 6px", textAlign: "left", color: "#7C5CBF", borderBottom: "2px solid #E8D5FF", whiteSpace: "nowrap" }}>テスト名</th>
+                  {SUBJECTS.filter(s => sortedTests.some(t => t.subjects?.[s]?.deviation)).map(s => (
+                    <th key={s} style={{ padding: "8px 6px", textAlign: "center", color: SUBJECT_COLORS[s], borderBottom: "2px solid #E8D5FF", whiteSpace: "nowrap" }}>{SUBJECT_ICONS[s]}{s}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...sortedTests].reverse().map((t, i) => {
+                  const parts = t.date.split("-");
+                  return (
+                    <tr key={t.id} style={{ borderBottom: "1px solid #f0ece6", background: i % 2 === 0 ? "white" : "#FAFAFF" }}>
+                      <td style={{ padding: "8px 6px", whiteSpace: "nowrap", color: "#888" }}>{parseInt(parts[1])}/{parseInt(parts[2])}</td>
+                      <td style={{ padding: "8px 6px", color: "#555", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.testName}</td>
+                      {SUBJECTS.filter(s => sortedTests.some(tt => tt.subjects?.[s]?.deviation)).map(s => {
+                        const dev = t.subjects?.[s]?.deviation;
+                        return (
+                          <td key={s} style={{ padding: "8px 6px", textAlign: "center", fontWeight: dev ? 700 : 400, color: dev ? SUBJECT_COLORS[s] : "#ddd" }}>
+                            {dev || "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* テスト詳細カード */}
+          {[...sortedTests].reverse().map(t => (
+            <TestCard key={t.id} test={t} onDelete={onDelete} onEdit={() => { setEditTest({...t}); setMode("add"); }} />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+function TestCard({ test, onDelete, onEdit }) {
+  const [expanded, setExpanded] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const parts = test.date.split("-");
+  const dateStr = `${parseInt(parts[0])}年${parseInt(parts[1])}月${parseInt(parts[2])}日`;
+  const filledSubjects = SUBJECTS.filter(s => test.subjects?.[s]?.deviation);
+
+  return (
+    <div style={{ background: "white", borderRadius: 16, padding: "14px 16px", marginBottom: 10, boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #E8D5FF" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }} onClick={() => setExpanded(!expanded)}>
+        <div style={{ fontSize: 22 }}>📝</div>
+        <div style={{ flex: 1, cursor: "pointer" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#555" }}>{test.testName || "（テスト名未入力）"}</div>
+          <div style={{ fontSize: 11, color: "#aaa" }}>{dateStr} {test.schoolName && `· ${test.schoolName}`}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+            {filledSubjects.map(s => (
+              <span key={s} style={{ fontSize: 12, fontWeight: 700, color: SUBJECT_COLORS[s] }}>{SUBJECT_ICONS[s]}{test.subjects[s].deviation}</span>
+            ))}
+          </div>
+        </div>
+        <button onClick={e => { e.stopPropagation(); onEdit(); }} style={{ border: "none", background: "none", fontSize: 14, cursor: "pointer", color: "#ccc", padding: 4 }}>✏️</button>
+        <button onClick={e => { e.stopPropagation(); setConfirmDel(true); }} style={{ border: "none", background: "none", fontSize: 14, cursor: "pointer", color: "#ddd", padding: 4 }}>🗑️</button>
+        <div style={{ fontSize: 14, color: "#ccc" }}>{expanded ? "▲" : "▼"}</div>
+      </div>
+      {confirmDel && (
+        <div style={{ marginTop: 10, padding: "10px 14px", background: "#FFF0F0", borderRadius: 10, border: "1px solid #FFD0D0" }}>
+          <div style={{ fontSize: 13, color: "#e05555", marginBottom: 8 }}>この記録を削除しますか？</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => onDelete(test.id)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: "#FF6B6B", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>削除</button>
+            <button onClick={() => setConfirmDel(false)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "1px solid #ddd", background: "white", color: "#888", fontSize: 13, cursor: "pointer" }}>キャンセル</button>
+          </div>
+        </div>
+      )}
+      {expanded && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #E8D5FF" }}>
+          {SUBJECTS.filter(s => test.subjects?.[s]?.deviation || test.subjects?.[s]?.comment).map(s => (
+            <div key={s} style={{ marginBottom: 10, background: SUBJECT_COLORS[s]+"10", borderRadius: 10, padding: "8px 12px" }}>
+              <div style={{ fontWeight: 700, color: SUBJECT_COLORS[s], fontSize: 13, marginBottom: 4 }}>
+                {SUBJECT_ICONS[s]} {s} {test.subjects[s]?.deviation && <span>偏差値 {test.subjects[s].deviation}</span>}
+              </div>
+              {test.subjects[s]?.comment && <div style={{ fontSize: 12, color: "#777" }}>{test.subjects[s].comment}</div>}
+            </div>
+          ))}
+          {test.overallComment && (
+            <div style={{ background: "#F8F5FF", borderRadius: 10, padding: "8px 12px", fontSize: 12, color: "#666", lineHeight: 1.7 }}>
+              💬 {test.overallComment}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecordCard({ record, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // タイムゾーン問題を避けるため date文字列を直接パース
-  const [year, month, day] = (record.date || "").split("-").map(Number);
+  const dateParts3 = (record.date || "").split("-");
+  const year = parseInt(dateParts3[0], 10) || 0;
+  const month = parseInt(dateParts3[1], 10) || 0;
+  const day = parseInt(dateParts3[2], 10) || 0;
   const dateStr = `${year}年${month}月${day}日`;
   const childMood = record.child?.気持ち || 3;
   const moodIcon = SCALE_LABELS["気持ち"][Math.max(0, childMood-1)];
@@ -581,6 +920,7 @@ export default function App() {
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [omochiMsg, setOmochiMsg] = useState("");
+  const [tests, setTests] = useState([]);
 
   // 起動時にスプシからデータを読み込む
   useEffect(() => {
@@ -657,6 +997,21 @@ export default function App() {
     setTab("home");
   };
 
+  const saveTest = async (test) => {
+    const newTests = [...tests];
+    const idx = newTests.findIndex((t) => t.id === test.id);
+    if (idx >= 0) newTests[idx] = test; else newTests.push(test);
+    newTests.sort((a, b) => a.date.localeCompare(b.date));
+    setTests(newTests);
+    try { await window.storage.set("tests", JSON.stringify(newTests)); } catch (e) {}
+  };
+
+  const deleteTest = async (id) => {
+    const newTests = tests.filter((t) => t.id !== id);
+    setTests(newTests);
+    try { await window.storage.set("tests", JSON.stringify(newTests)); } catch (e) {}
+  };
+
   const deleteRecord = async (record) => {
     const newRecords = records.filter((r) => !(r.date === record.date && r.timeSlot === record.timeSlot));
     setRecords(newRecords);
@@ -702,7 +1057,7 @@ export default function App() {
     app: { maxWidth: 440, margin: "0 auto", minHeight: "100vh", background: "#FFFBF7", fontFamily: "'Hiragino Maru Gothic ProN', 'Noto Sans JP', sans-serif" },
     header: { background: "linear-gradient(135deg, #FF8C42 0%, #FFB347 100%)", padding: "12px 16px 16px", position: "relative", overflow: "hidden" },
     nav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 440, background: "white", borderTop: "1px solid #f0ece6", display: "flex", zIndex: 100, boxShadow: "0 -4px 20px rgba(0,0,0,0.08)" },
-    navBtn: (a) => ({ flex: 1, padding: "8px 4px 12px", border: "none", background: "none", color: a ? "#FF8C42" : "#bbb", fontSize: 10, fontWeight: a ? 700 : 400, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }),
+    navBtn: (a) => ({ flex: 1, padding: "6px 2px 10px", border: "none", background: "none", color: a ? "#FF8C42" : "#bbb", fontSize: 9, fontWeight: a ? 700 : 400, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }),
     content: { padding: "12px 16px 100px" },
     card: { background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" },
     title: (c) => ({ fontSize: 16, fontWeight: 800, color: c || "#444", marginBottom: 16 }),
@@ -828,9 +1183,8 @@ export default function App() {
             <Divider label="✏️ 今日の記録" />
             <TextArea label="⭐ 今日の良かったこと・ほめたいこと" value={today.parent.goodPoint} onChange={(v) => setToday({ ...today, parent: { ...today.parent, goodPoint: v } })} placeholder="子どもの良かったところ" color="#4ECDC4" />
             <TextArea label="💭 つまづき・課題" value={today.parent.tsumazuki} onChange={(v) => setToday({ ...today, parent: { ...today.parent, tsumazuki: v } })} placeholder="サポートが必要なこと" color="#96CEB4" />
-            <div style={{ background: "#F0FAFA", borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 12, color: "#4ECDC4", lineHeight: 1.7 }}>
-              💡 <strong>声かけヒント：</strong><br />結果より過程を褒めましょう。努力を認める言葉が子どものやる気につながります。
-            </div>
+            <TextArea label="🌟 最高だったこと・今日のひとこと" value={today.parent.bestDay || ""} onChange={(v) => setToday({ ...today, parent: { ...today.parent, bestDay: v } })} placeholder="今日一番よかったこと、印象に残ったことなど" color="#FFB347" />
+            <ParentAdvice records={records} today={today} />
             <button style={S.saveBtn("linear-gradient(135deg, #4ECDC4, #45B7D1)")} onClick={saveRecord}>💾 記録する</button>
           </div>
         )}
@@ -856,6 +1210,10 @@ export default function App() {
               </button>
             </div>
           </>
+        )}
+
+        {tab === "test" && (
+          <TestTab tests={tests} onSave={saveTest} onDelete={deleteTest} />
         )}
 
         {tab === "history" && (
@@ -898,10 +1256,11 @@ export default function App() {
           { key: "child", icon: "🐹", label: "こども" },
           { key: "parent", icon: "👨‍👩‍👧", label: "保護者" },
           { key: "graph", icon: "📊", label: "グラフ" },
+          { key: "test", icon: "📝", label: "テスト" },
           { key: "history", icon: "📅", label: "履歴" },
         ].map(({ key, icon, label }) => (
           <button key={key} style={S.navBtn(tab === key)} onClick={() => setTab(key)}>
-            <span style={{ fontSize: 20 }}>{icon}</span>
+            <span style={{ fontSize: 18 }}>{icon}</span>
             <span>{label}</span>
           </button>
         ))}
