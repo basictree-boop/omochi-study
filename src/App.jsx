@@ -349,27 +349,40 @@ function BarChart({ records }) {
 
 function MentalChart({ records }) {
   if (records.length === 0) return null;
-  const last7 = records.slice(-7);
+
+  // 日付単位で気持ちを平均（繰り上げ）集計
+  const dayMap = {};
+  records.forEach(r => {
+    const d = r.date;
+    if (!dayMap[d]) dayMap[d] = { childMoods: [], parentMoods: [] };
+    if (r.child?.気持ち > 0) dayMap[d].childMoods.push(r.child.気持ち);
+    if (r.parent?.気持ち > 0) dayMap[d].parentMoods.push(r.parent.気持ち);
+  });
+
+  const days = Object.keys(dayMap).sort().slice(-7);
+
   return (
     <div style={{ marginTop: 20 }}>
-      <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontWeight: 600 }}>💝 メンタル推移</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        {last7.map((r, i) => {
-          const dateParts2 = (r.date || "").split("-");
-          const mm = parseInt(dateParts2[1], 10) || 0;
-          const md = parseInt(dateParts2[2], 10) || 0;
-          const cm = r.child?.気持ち || 0;
-          const pm = r.parent?.気持ち || 0;
+      <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontWeight: 600 }}>💝 メンタル推移（直近7日）</div>
+      <div style={{ display: "flex", gap: 4, alignItems: "flex-end" }}>
+        {days.map((date, i) => {
+          const dp = date.split("-");
+          const mm = parseInt(dp[1], 10);
+          const md = parseInt(dp[2], 10);
+          const cMoods = dayMap[date].childMoods;
+          const pMoods = dayMap[date].parentMoods;
+          const cm = cMoods.length ? Math.ceil(cMoods.reduce((a,b)=>a+b,0)/cMoods.length) : 0;
+          const pm = pMoods.length ? Math.ceil(pMoods.reduce((a,b)=>a+b,0)/pMoods.length) : 0;
           return (
-            <div key={i} style={{ flex: 1, textAlign: "center" }}>
-              <div style={{ fontSize: 18 }}>{cm > 0 ? SCALE_LABELS["気持ち"][cm-1] : "·"}</div>
-              <div style={{ fontSize: 10, color: "#ccc" }}>{mm}/{md}</div>
-              {pm > 0 && <div style={{ fontSize: 12, opacity: 0.6 }}>{SCALE_LABELS["気持ち_parent"][pm-1]}</div>}
+            <div key={date} style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 20 }}>{cm > 0 ? SCALE_LABELS["気持ち"][cm-1] : "·"}</div>
+              <div style={{ fontSize: 10, color: "#ccc", margin: "2px 0" }}>{mm}/{md}</div>
+              <div style={{ fontSize: 13, opacity: pm > 0 ? 0.7 : 0.2 }}>{pm > 0 ? SCALE_LABELS["気持ち_parent"][pm-1] : "·"}</div>
             </div>
           );
         })}
       </div>
-      <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>大: 子ども / 小: 保護者</div>
+      <div style={{ fontSize: 11, color: "#bbb", marginTop: 6 }}>大: 子ども / 小: 保護者（1日複数記録は平均・繰り上げ）</div>
     </div>
   );
 }
@@ -997,17 +1010,17 @@ function parseSheetRows(rows) {
         姿勢: parseInt(get(10)) || 0,
         気持ち: parseInt(get(11)) || 0,
         goodPoint: get(12),
-        dekita: get(13),
-        tsumazuki: get(14),
+        tsumazuki: get(13),   // 親:dekita は削除済み → 13=親:つまづき
       },
       dailyChecks: {
-        meal: get(15) === "○",
-        sleep: get(16) === "○",
-        book: get(17) === "○",
-        rest: get(18) === "○",
-        talk: get(19) === "○",
+        meal: get(14) === "○",   // 14=チェック:ご飯
+        sleep: get(15) === "○",  // 15=チェック:睡眠
+        book: get(16) === "○",   // 16=チェック:読書
+        rest: get(17) === "○",   // 17=チェック:休憩
+        talk: get(18) === "○",   // 18=チェック:おしゃべり
       },
-      bestDay: get(20),
+      bestDay: get(19),          // 19=最高だったこと
+      recordedAt: get(20),       // 20=記録日時(アプリ)
     };
   }).filter(r => r.date);
 }
