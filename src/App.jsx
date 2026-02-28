@@ -550,25 +550,21 @@ function TestTab({ tests, onSave, onDelete }) {
             </div>
           ))}
         </div>
-        {/* 順位（全体） */}
-        <div style={{ fontSize: 11, color: "#aaa", marginBottom: 4, fontWeight: 600 }}>順位（全体）</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-          <input type="number" value={sub.rankNum || ""} onChange={e => updateSubject(sKey, "rankNum", e.target.value)}
-            placeholder="位" style={{ flex: 1, padding: "7px 8px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
-          <span style={{ fontSize: 12, color: "#aaa" }}>位 /</span>
-          <input type="number" value={sub.rankTotal || ""} onChange={e => updateSubject(sKey, "rankTotal", e.target.value)}
-            placeholder="人中" style={{ flex: 1, padding: "7px 8px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
-          <span style={{ fontSize: 12, color: "#aaa" }}>人中</span>
-        </div>
-        {/* 男女別順位 */}
-        <div style={{ fontSize: 11, color: "#aaa", marginBottom: 4, fontWeight: 600 }}>男女別順位</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-          <input type="number" value={sub.rankFNum || ""} onChange={e => updateSubject(sKey, "rankFNum", e.target.value)}
-            placeholder="位" style={{ flex: 1, padding: "7px 8px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
-          <span style={{ fontSize: 12, color: "#aaa" }}>位 /</span>
-          <input type="number" value={sub.rankFTotal || ""} onChange={e => updateSubject(sKey, "rankFTotal", e.target.value)}
-            placeholder="人中" style={{ flex: 1, padding: "7px 8px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 15, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
-          <span style={{ fontSize: 12, color: "#aaa" }}>人中</span>
+        {/* 順位（全体・男女別） */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+          {[["順位（全体）", "rankNum", "rankTotal"], ["男女別順位", "rankFNum", "rankFTotal"]].map(([lbl, numKey, totKey]) => (
+            <div key={lbl} style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: "#aaa", marginBottom: 4, fontWeight: 600 }}>{lbl}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input type="number" value={sub[numKey] || ""} onChange={e => updateSubject(sKey, numKey, e.target.value)}
+                  placeholder="—" style={{ flex: 1, minWidth: 0, padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 14, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+                <span style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap" }}>位/</span>
+                <input type="number" value={sub[totKey] || ""} onChange={e => updateSubject(sKey, totKey, e.target.value)}
+                  placeholder="—" style={{ flex: 1, minWidth: 0, padding: "7px 4px", borderRadius: 8, border: `2px solid ${color}33`, fontSize: 14, fontWeight: 700, background: "white", boxSizing: "border-box", outline: "none", textAlign: "center" }} />
+                <span style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap" }}>人</span>
+              </div>
+            </div>
+          ))}
         </div>
         <textarea value={sub.comment || ""} onChange={e => updateSubject(sKey, "comment", e.target.value)}
           placeholder="コメント（任意）" rows={2}
@@ -963,6 +959,40 @@ function parseSheetRows(rows) {
   }).filter(r => r.date);
 }
 
+// テスト結果シートの行をパース
+function parseTestRows(rows) {
+  if (!rows || rows.length < 2) return [];
+  // ヘッダー行をスキップ
+  return rows.slice(1).map((row) => {
+    const g = (i) => (row[i] || "").toString().trim();
+    const parseSub = (offset) => ({
+      deviation: g(offset),
+      score: g(offset + 1),
+      avg: g(offset + 2),
+      rankNum: g(offset + 3),
+      rankTotal: g(offset + 4),
+      rankFNum: g(offset + 5),
+      rankFTotal: g(offset + 6),
+    });
+    const parseSub8 = (offset) => ({ ...parseSub(offset), comment: g(offset + 7) });
+    return {
+      id: g(0) || Date.now().toString(),
+      date: g(1),
+      schoolName: g(2),
+      testName: g(3),
+      subjects: {
+        算数: parseSub8(4),
+        国語: parseSub8(12),
+        理科: parseSub8(20),
+        社会: parseSub8(28),
+        "2科目": parseSub(36),
+        "4科目": parseSub(43),
+      },
+      overallComment: g(50),
+    };
+  }).filter(r => r.date);
+}
+
 export default function App() {
   const [tab, setTab] = useState("home");
   const [records, setRecords] = useState([]);
@@ -1011,7 +1041,28 @@ export default function App() {
         setLoading(false);
       }
     };
+
+    const loadTestsFromSheet = async () => {
+      try {
+        const url = gasUrl || GAS_URL;
+        const res = await fetch(`${url}?action=getTests`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.rows && json.rows.length > 0) {
+            const parsed = parseTestRows(json.rows);
+            if (parsed.length > 0) setTests(parsed);
+          }
+        }
+      } catch (e) {
+        try {
+          const raw = localStorage.getItem("tests");
+          if (raw) setTests(JSON.parse(raw));
+        } catch {}
+      }
+    };
+
     loadFromSheet();
+    loadTestsFromSheet();
   }, []);
 
   useEffect(() => {
@@ -1068,13 +1119,23 @@ export default function App() {
     if (idx >= 0) newTests[idx] = test; else newTests.push(test);
     newTests.sort((a, b) => a.date.localeCompare(b.date));
     setTests(newTests);
-    try { await window.storage.set("tests", JSON.stringify(newTests)); } catch (e) {}
+    // ローカル保存
+    try { localStorage.setItem("tests", JSON.stringify(newTests)); } catch {}
+    // スプシに送信
+    if (gasUrl) {
+      try {
+        const payload = { ...test, type: "test" };
+        const encoded = encodeURIComponent(JSON.stringify(payload));
+        await fetch(`${gasUrl}?data=${encoded}`);
+      } catch {}
+    }
   };
 
   const deleteTest = async (id) => {
     const newTests = tests.filter((t) => t.id !== id);
     setTests(newTests);
-    try { await window.storage.set("tests", JSON.stringify(newTests)); } catch (e) {}
+    try { localStorage.setItem("tests", JSON.stringify(newTests)); } catch {}
+    // ※スプシ側の物理削除はサポートしない（行が残る）
   };
 
   const deleteRecord = async (record) => {
@@ -1097,7 +1158,18 @@ export default function App() {
         const json = await res.json();
         if (json.rows) setRecords(parseSheetRows(json.rows));
       }
-    } catch {} finally { setLoading(false); }
+    } catch {}
+    try {
+      const res2 = await fetch(`${gasUrl}?action=getTests`);
+      if (res2.ok) {
+        const json2 = await res2.json();
+        if (json2.rows) {
+          const parsed = parseTestRows(json2.rows);
+          if (parsed.length > 0) setTests(parsed);
+        }
+      }
+    } catch {}
+    setLoading(false);
   };
 
   const totalMinutes = records.reduce((a, r) => a + (r.studyMinutes || 0), 0);
