@@ -1056,6 +1056,24 @@ function parseTestRows(rows) {
   // ヘッダー行をスキップ
   return rows.slice(1).map((row) => {
     const g = (i) => (row[i] || "").toString().trim();
+
+    // 日付パース：スプシのDate型・文字列型どちらも YYYY-MM-DD に変換
+    const parseDate = (val) => {
+      if (!val) return "";
+      const s = val.toString().trim();
+      // 既に YYYY-MM-DD 形式
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+      // GASがDate型で返した場合 (例: "Sat Feb 28 2026 00:00:00 GMT+0900")
+      // または "2026/01/10" 形式
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        return jst.toISOString().split("T")[0];
+      }
+      // "2026/01/10" → "2026-01-10"
+      return s.replace(/\//g, "-").substring(0, 10);
+    };
+
     const parseSub = (offset) => ({
       deviation: g(offset),
       score: g(offset + 1),
@@ -1068,7 +1086,7 @@ function parseTestRows(rows) {
     const parseSub8 = (offset) => ({ ...parseSub(offset), comment: g(offset + 7) });
     return {
       id: g(0) || Date.now().toString(),
-      date: g(1),
+      date: parseDate(row[1]),
       schoolName: g(2),
       testName: g(3),
       subjects: {
