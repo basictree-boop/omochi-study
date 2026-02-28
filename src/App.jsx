@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-const SUBJECTS = ["算数", "国語", "理科", "社会"];
+const SUBJECTS = ["国語", "算数", "理科", "社会"];
 const SUBJECT_COLORS = { 算数: "#FF6B6B", 国語: "#4ECDC4", 理科: "#45B7D1", 社会: "#96CEB4" };
 const SUBJECT_ICONS = { 算数: "🔢", 国語: "📖", 理科: "🔬", 社会: "🌍" };
 const TIME_SLOTS = ["朝", "昼", "夜"];
@@ -374,12 +374,52 @@ function MentalChart({ records }) {
   );
 }
 
+// 期間フィルタリング用ヘルパー
+function filterByPeriod(records, period) {
+  const now = new Date();
+  const cutoff = new Date(now);
+  if (period === "7d") cutoff.setDate(now.getDate() - 7);
+  else cutoff.setDate(now.getDate() - 30);
+  const cutoffStr = getJSTDateString(cutoff);
+  return records.filter(r => r.date >= cutoffStr);
+}
+
+// 日付単位でユニーク集計（習慣チェック用）
+function groupByDate(records) {
+  const map = {};
+  records.forEach(r => {
+    const d = r.date;
+    if (!map[d]) map[d] = { checks: {} };
+    const c = r.dailyChecks || {};
+    DAILY_CHECKS.forEach(({ key }) => {
+      if (c[key]) map[d].checks[key] = true;
+    });
+  });
+  return map;
+}
+
+function PeriodToggle({ period, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+      {[["7d", "直近7日"], ["30d", "1ヶ月"]].map(([val, lbl]) => (
+        <button key={val} onClick={() => onChange(val)} style={{
+          padding: "4px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12, fontWeight: val === period ? 700 : 400,
+          background: val === period ? "#FF8C42" : "#f0ece6",
+          color: val === period ? "white" : "#aaa",
+          transition: "all 0.15s",
+        }}>{lbl}</button>
+      ))}
+    </div>
+  );
+}
+
 function SubjectChart({ records }) {
+  const [period, setPeriod] = useState("7d");
+  const filtered = filterByPeriod(records, period);
   if (records.length === 0) return null;
   const st = {};
   SUBJECTS.forEach((s) => (st[s] = 0));
-  records.forEach((r) => {
-    // subjectMinutes があればそちらを優先、なければ均等割り
+  filtered.forEach((r) => {
     if (r.subjectMinutes) {
       SUBJECTS.forEach((s) => { st[s] += r.subjectMinutes[s] || 0; });
     } else {
@@ -389,18 +429,23 @@ function SubjectChart({ records }) {
     }
   });
   const total = Object.values(st).reduce((a, b) => a + b, 0);
-  if (total === 0) return null;
+  if (total === 0 && filtered.length === 0) return null;
   return (
     <div style={{ marginTop: 20 }}>
-      <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontWeight: 600 }}>📚 科目別の取り組み時間</div>
-      {SUBJECTS.map((s) => (
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 13, color: "#888", fontWeight: 600 }}>📚 科目別の取り組み時間</div>
+        <PeriodToggle period={period} onChange={setPeriod} />
+      </div>
+      {total === 0 ? (
+        <div style={{ color: "#ccc", fontSize: 12, textAlign: "center", padding: "8px 0" }}>この期間の記録がありません</div>
+      ) : SUBJECTS.map((s) => (
         <div key={s} style={{ marginBottom: 8 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
             <span>{SUBJECT_ICONS[s]} {s}</span>
             <span style={{ color: "#aaa" }}>{Math.round(st[s])}分</span>
           </div>
           <div style={{ background: "#f0ece6", borderRadius: 6, height: 8, overflow: "hidden" }}>
-            <div style={{ width: `${(st[s]/total)*100}%`, height: "100%", background: SUBJECT_COLORS[s], borderRadius: 6, transition: "width 0.5s ease" }} />
+            <div style={{ width: `${total > 0 ? (st[s]/total)*100 : 0}%`, height: "100%", background: SUBJECT_COLORS[s], borderRadius: 6, transition: "width 0.5s ease" }} />
           </div>
         </div>
       ))}
@@ -409,19 +454,31 @@ function SubjectChart({ records }) {
 }
 
 function CheckChart({ records }) {
+  const [period, setPeriod] = useState("7d");
+  const filtered = filterByPeriod(records, period);
   if (records.length === 0) return null;
+  // 日付単位でユニーク集計
+  const dayMap = groupByDate(filtered);
+  const days = Object.keys(dayMap);
+  const totalDays = days.length;
   const totals = {};
   DAILY_CHECKS.forEach(({ key }) => (totals[key] = 0));
-  records.forEach((r) => { const c = r.dailyChecks || {}; DAILY_CHECKS.forEach(({ key }) => { if (c[key]) totals[key]++; }); });
+  days.forEach(d => { DAILY_CHECKS.forEach(({ key }) => { if (dayMap[d].checks[key]) totals[key]++; }); });
   return (
     <div style={{ marginTop: 20 }}>
-      <div style={{ fontSize: 13, color: "#888", marginBottom: 12, fontWeight: 600 }}>✅ 習慣チェック達成率</div>
-      {DAILY_CHECKS.map(({ key, label, icon }) => {
-        const pct = (totals[key] / records.length) * 100;
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 13, color: "#888", fontWeight: 600 }}>✅ 習慣チェック達成率</div>
+        <PeriodToggle period={period} onChange={setPeriod} />
+      </div>
+      {totalDays === 0 ? (
+        <div style={{ color: "#ccc", fontSize: 12, textAlign: "center", padding: "8px 0" }}>この期間の記録がありません</div>
+      ) : DAILY_CHECKS.map(({ key, label, icon }) => {
+        const pct = totalDays > 0 ? (totals[key] / totalDays) * 100 : 0;
         return (
           <div key={key} style={{ marginBottom: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
-              <span>{icon} {label}</span><span style={{ color: "#aaa" }}>{Math.round(pct)}%</span>
+              <span>{icon} {label}</span>
+              <span style={{ color: "#aaa" }}>{Math.round(pct)}% <span style={{ fontSize: 10 }}>({totals[key]}/{totalDays}日)</span></span>
             </div>
             <div style={{ background: "#f0ece6", borderRadius: 6, height: 8, overflow: "hidden" }}>
               <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #96CEB4, #4ECDC4)", borderRadius: 6, transition: "width 0.5s ease" }} />
@@ -429,6 +486,7 @@ function CheckChart({ records }) {
           </div>
         );
       })}
+      <div style={{ fontSize: 10, color: "#bbb", marginTop: 4 }}>※1日に複数回入力があっても1日1回として集計</div>
     </div>
   );
 }
@@ -519,7 +577,7 @@ function TestTab({ tests, onSave, onDelete }) {
     schoolName: "",
     testName: "",
     subjects: {
-      算数: emptySubject(), 国語: emptySubject(), 理科: emptySubject(), 社会: emptySubject(),
+      国語: emptySubject(), 算数: emptySubject(), 理科: emptySubject(), 社会: emptySubject(),
       "2科目": emptySubject(), "4科目": emptySubject(),
     },
     overallComment: "",
@@ -623,8 +681,8 @@ function TestTab({ tests, onSave, onDelete }) {
   const ALL_COLORS = { ...SUBJECT_COLORS, "2科目": "#9B59B6", "4科目": "#E74C3C" };
   const ALL_ICONS = { ...SUBJECT_ICONS, "2科目": "📘", "4科目": "📕" };
 
-  const graphKeys = ALL_KEYS.filter(k => sortedTests.some(t => t.subjects?.[k]?.deviation));
-  const allDevs = sortedTests.flatMap(t => ALL_KEYS.map(k => parseFloat(t.subjects?.[k]?.deviation)||0)).filter(v=>v>0);
+  const graphKeys = SUBJECTS.filter(k => sortedTests.some(t => t.subjects?.[k]?.deviation));
+  const allDevs = sortedTests.flatMap(t => SUBJECTS.map(k => parseFloat(t.subjects?.[k]?.deviation)||0)).filter(v=>v>0);
   const minDev = allDevs.length ? Math.max(20, Math.min(...allDevs) - 5) : 30;
   const maxDev = allDevs.length ? Math.min(80, Math.max(...allDevs) + 5) : 70;
   const GRAPH_H = 150;
@@ -651,7 +709,7 @@ function TestTab({ tests, onSave, onDelete }) {
             <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 12 }}>📈 偏差値推移</div>
               <div style={{ position: "relative", height: GRAPH_H + 24, marginLeft: 28 }}>
-                {[minDev, Math.round((minDev+maxDev)/2), maxDev].map(v => {
+                {Array.from({length: 6}, (_, i) => Math.round(minDev + (maxDev - minDev) * i / 5)).map(v => {
                   const y = GRAPH_H - ((v - minDev) / Math.max(1, maxDev - minDev)) * GRAPH_H;
                   return (
                     <div key={v} style={{ position: "absolute", left: -28, right: 0, top: y }}>
@@ -680,10 +738,7 @@ function TestTab({ tests, onSave, onDelete }) {
                             strokeDasharray={k === "2科目" || k === "4科目" ? "5,3" : "none"} />
                         ) : null)}
                         {valid.map((p, i) => (
-                          <g key={i}>
-                            <circle cx={p.x} cy={p.y} r="5" fill={ALL_COLORS[k]} />
-                            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="9" fill={ALL_COLORS[k]} fontWeight="bold">{p.dev}</text>
-                          </g>
+                          <circle key={i} cx={p.x} cy={p.y} r="5" fill={ALL_COLORS[k]} />
                         ))}
                       </g>
                     );
@@ -698,9 +753,7 @@ function TestTab({ tests, onSave, onDelete }) {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
                 {graphKeys.map(k => (
-                  <span key={k} style={{ fontSize: 11, color: ALL_COLORS[k], fontWeight: 700 }}>
-                    {k === "2科目" || k === "4科目" ? "- -" : "●"} {k}
-                  </span>
+                  <span key={k} style={{ fontSize: 11, color: ALL_COLORS[k], fontWeight: 700 }}>● {k}</span>
                 ))}
               </div>
             </div>
@@ -1334,18 +1387,6 @@ export default function App() {
               <MentalChart records={records} />
               <SubjectChart records={records} />
               <CheckChart records={records} />
-            </div>
-            <div style={S.card}>
-              <div style={S.title()}>📊 データエクスポート</div>
-              <button onClick={() => {
-                const headers = ["日付","時間帯","勉強時間(分)","科目","子:体調","子:気持ち","子:自信度","子:できた","子:つまづき","子:自分へのひとこと","親:姿勢","親:気持ち","親:良かった点","親:できた","親:つまづき",...DAILY_CHECKS.map(({label})=>`チェック:${label}`),"最高だったこと"];
-                const rows = records.map((r) => [r.date,r.timeSlot,r.studyMinutes,(r.subjects||[]).join("/"),r.child?.体調||"",r.child?.気持ち||"",r.child?.自信度||"",r.child?.dekita||"",r.child?.tsumazuki||"",r.child?.hitokoto||"",r.parent?.姿勢||"",r.parent?.気持ち||"",r.parent?.goodPoint||"",r.parent?.dekita||"",r.parent?.tsumazuki||"",...DAILY_CHECKS.map(({key})=>(r.dailyChecks||{})[key]?"○":""),r.bestDay||""]);
-                const csv = [headers,...rows].map((row)=>row.map((c)=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
-                const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
-                const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download="学習記録.csv"; a.click(); URL.revokeObjectURL(url);
-              }} style={{...S.saveBtn("linear-gradient(135deg, #96CEB4, #45B7D1)"), fontSize: 15}}>
-                📥 CSVをダウンロード
-              </button>
             </div>
           </>
         )}
