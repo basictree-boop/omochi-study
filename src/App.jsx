@@ -785,41 +785,53 @@ function TestTab({ tests, onSave, onDelete }) {
             </div>
           )}
 
-          {/* 結果一覧表（偏差値のみ） */}
-          <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflowX: "auto" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 12 }}>📋 偏差値一覧</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 300 }}>
-              <thead>
-                <tr style={{ background: "#7C5CBF11" }}>
-                  <th style={{ padding: "6px 4px", textAlign: "left", color: "#7C5CBF", borderBottom: "2px solid #E8D5FF", fontSize: 11 }}>日付・テスト名</th>
-                  {graphKeys.map(k => (
-                    <th key={k} style={{ padding: "6px 4px", textAlign: "center", color: ALL_COLORS[k], borderBottom: "2px solid #E8D5FF", fontSize: 11, whiteSpace: "nowrap" }}>{ALL_ICONS[k]}{k}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[...sortedTests].reverse().map((t, i) => {
-                  const pts = t.date.split("-");
-                  return (
-                    <tr key={t.id} style={{ borderBottom: "1px solid #f0ece6", background: i % 2 === 0 ? "white" : "#FAFAFF" }}>
-                      <td style={{ padding: "6px 4px", color: "#555", fontSize: 11 }}>
-                        <div style={{ color: "#aaa", fontSize: 10 }}>{parseInt(pts[1])}/{parseInt(pts[2])}</div>
-                        <div style={{ fontWeight: 600, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.schoolName || t.testName}</div>
-                      </td>
-                      {graphKeys.map(k => {
-                        const dev = t.subjects?.[k]?.deviation;
-                        return (
-                          <td key={k} style={{ padding: "6px 4px", textAlign: "center", fontWeight: dev ? 700 : 400, color: dev ? ALL_COLORS[k] : "#ddd", fontSize: 13 }}>
-                            {dev || "—"}
-                          </td>
-                        );
-                      })}
+          {/* 結果一覧表（偏差値：4科目＋2科目・4科目合計） */}
+          {(() => {
+            // 実際にデータがある列だけ表示（4科目 + 2科目・4科目合計）
+            const tableKeys = ALL_KEYS.filter(k => sortedTests.some(t => t.subjects?.[k]?.deviation));
+            if (tableKeys.length === 0) return null;
+            return (
+              <div style={{ background: "white", borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflowX: "auto" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 12 }}>📋 偏差値一覧</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 320 }}>
+                  <thead>
+                    <tr style={{ background: "#7C5CBF11" }}>
+                      <th style={{ padding: "6px 4px", textAlign: "left", color: "#7C5CBF", borderBottom: "2px solid #E8D5FF", fontSize: 11 }}>日付・塾名</th>
+                      {tableKeys.map(k => (
+                        <th key={k} style={{ padding: "6px 4px", textAlign: "center", color: ALL_COLORS[k], borderBottom: "2px solid #E8D5FF", fontSize: 11, whiteSpace: "nowrap",
+                          borderLeft: (k === "2科目") ? "2px solid #E8D5FF" : undefined }}>
+                          {ALL_ICONS[k]}<br/>{k}
+                        </th>
+                      ))}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {[...sortedTests].reverse().map((t, i) => {
+                      const pts = t.date.split("-");
+                      return (
+                        <tr key={t.id} style={{ borderBottom: "1px solid #f0ece6", background: i % 2 === 0 ? "white" : "#FAFAFF" }}>
+                          <td style={{ padding: "6px 4px", color: "#555", fontSize: 11 }}>
+                            <div style={{ color: "#aaa", fontSize: 10 }}>{parseInt(pts[1])}/{parseInt(pts[2])}</div>
+                            <div style={{ fontWeight: 600, maxWidth: 72, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.schoolName || t.testName}</div>
+                          </td>
+                          {tableKeys.map(k => {
+                            const dev = t.subjects?.[k]?.deviation;
+                            return (
+                              <td key={k} style={{ padding: "6px 4px", textAlign: "center", fontWeight: dev ? 700 : 400,
+                                color: dev ? ALL_COLORS[k] : "#ddd", fontSize: 13,
+                                borderLeft: (k === "2科目") ? "2px solid #E8D5FF" : undefined }}>
+                                {dev || "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           {/* テスト詳細カード */}
           {[...sortedTests].reverse().map(t => (
